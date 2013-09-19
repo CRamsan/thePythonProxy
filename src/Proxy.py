@@ -6,7 +6,7 @@ import select
 
 PROXY_NAME = 'Perry, the Python Proxy'
 HTTP_VERSION = 'HTTP/1.1'
-BUFFER_LENGHT = 1024
+BUFFER_LENGHT = 1024 * 8
 
 class ProxyConnection:
    def __init__(self, connection, address, timeout):
@@ -25,7 +25,7 @@ class ProxyConnection:
       while 1:
          self.client_buffer += self.client.recv(BUFFER_LENGHT)
          end = self.client_buffer.find('\n')
-         if end!= -1:
+         if end != -1:
             break
       print '%s'%self.client_buffer[:end]
       data = (self.client_buffer[:end+1]).split()
@@ -55,7 +55,7 @@ class ProxyConnection:
       self.target.connect(address)
 
    def localConnect(self):
-      time_out_max = self.timeout/3
+      time_out_max = self.timeout
       socs = [self.client, self.target]
       count = 0
       while 1:
@@ -78,10 +78,10 @@ class ProxyConnection:
 
 def start(host='localhost', port=1234, IPv6=False, timeout=30, handler=ProxyConnection):
    if IPv6==True:
-      soc_type=socket.AF_INET6
+      soc_family=socket.AF_INET6
    else:
-      soc_type=socket.AF_INET
-   soc = socket.socket(soc_type)
+      soc_family=socket.AF_INET
+   soc = socket.socket(soc_family)
    soc.bind((host, port))
    print "Listening on %s:%d."%(host, port)
    soc.listen(0)
