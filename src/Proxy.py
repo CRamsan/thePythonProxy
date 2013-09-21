@@ -7,25 +7,33 @@ BUFFER_LENGHT = 1024 * 8
 import threading
 import socket
 
+class ClientRequest:
+	def __init__(self, connection, conn_buffer):
+		while 1:
+			client_buffer += connection.recv(BUFFER_LENGHT)
+			end = conn_buffer.find('\n')
+			if end!=-1:
+				break
+		data = (conn_buffer[:end+1]).split()
+		self.method = data[0]
+		self.path = data[1]
+		self.protocol = data [2]
+
+
 class ProxyConnection:
+		
 	def __init__(self, connection, address, timeout):
 		self.local_connection = connection
 		self.remote_connection  = None
 		self.conn_buffer = ''
 		self.timeout = timeout
 
-		data = self._get_base_header()
-		self.method = data[0]
-		self.path = data[1]
-		self.protocol = data [2]
+		self.request = ClientRequest(self.local_connection, self.conn_buffer)
 
 		self._forwarding()
 
 		self._remote_connection.close()
 		self._local_connection.close()
-
-	def _get_base_header(self):
-		pass
 
 	def _forwarding(self):
 		pass

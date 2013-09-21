@@ -25,8 +25,10 @@ class ConnectionHandler:
             end = self.client_buffer.find('\n')
             if end!=-1:
                 break
-        print '%s'%self.client_buffer[:end]#debug
+        print self.client_buffer
+        #print '%s'%self.client_buffer[:end]#debug
         data = (self.client_buffer[:end+1]).split()
+        print data
         self.client_buffer = self.client_buffer[end+1:]
         return data
 
@@ -81,7 +83,7 @@ class ConnectionHandler:
             if count == time_out_max:
                 break
 
-def start_server(host='localhost', port=8080, IPv6=False, timeout=60,
+def start_server(host='localhost', port=8081, IPv6=False, timeout=60,
                   handler=ConnectionHandler):
     if IPv6==True:
         soc_type=socket.AF_INET6
