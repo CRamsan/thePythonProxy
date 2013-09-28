@@ -111,4 +111,8 @@ def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
                 threading.Thread(target=ProxyConn, args=(client_socket, address, timeout)).start()
 
 if __name__ == '__main__':
-        start_server()
+
+        if len(sys.argv) > 1:
+                start_server(port=argv[1])
+        else:
+                start_server()
