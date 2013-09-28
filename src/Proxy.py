@@ -4,8 +4,7 @@ PROXY_NAME = 'Perry, the Python Proxy'
 HTTP_VERSION = 'HTTP/1.1'
 BUFFER_LENGTH = 1024 * 8
 
-import threading
-import socket
+import threading, socket, sys
 
 class ClientRequest:
 
@@ -113,6 +112,6 @@ def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
 if __name__ == '__main__':
 
         if len(sys.argv) > 1:
-                start_server(port=argv[1])
+                start_server(port=int(sys.argv[1]))
         else:
                 start_server()
