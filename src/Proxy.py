@@ -2,40 +2,39 @@
 
 PROXY_NAME = 'Perry, the Python Proxy'
 HTTP_VERSION = 'HTTP/1.1'
-BUFFER_LENGHT = 1024 * 8
+BUFFER_LENGTH = 1024 * 8
 
 import threading
 import socket
 
-class ClientRequest:
-        def __init__(self, connection, conn_buffer):
+class clientRequest:
+        def __init__(self, conn, conn_buffer):
                 while 1:
-                        client_buffer += connection.recv(BUFFER_LENGHT)
-                        end = conn_buffer.find('\n')
+                        clientBuffer += conn.recv(BUFFER_LENGTH)
+                        end = connBuffer.find('\n')
                         if end!=-1:
                                 break
-                data = (conn_buffer[:end+1]).split()
+                data = (connBuffer[:end+1]).split()
                 self.method = data[0]
                 self.path = data[1]
                 self.protocol = data [2]
 
 
-class ProxyConnection:
+class proxyConn:
                 
-        def __init__(self, connection, timeout):
-                self.local_connection = connection
-                self.remote_connection  = None
-                self.conn_buffer = ''
+        def __init__(self, clientConn, timeout):
+                self.localConn = conn
+                self.remoteConn  = None
+                self.connBuffer = ''
                 self.timeout = timeout
 
-                self.request = ClientRequest(self.local_connection, self.conn_buffer)
+                self.request = clientRequest(self.localConn, self.connBuffer)
+                self._forward()
 
-                self._forwarding()
+                self._remoteConn.close()
+                self._localConn.close()
 
-                self._remote_connection.close()
-                self._local_connection.close()
-
-        def _forwarding(self):
+        def _forward(self):
                 pass
 
         def _remoteConnect(self, host):
@@ -45,26 +44,27 @@ class ProxyConnection:
                 pass
 
 
-def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
+def startServer(host='localhost', port=4444, IPv6=False, timeout=30):
 
         # socket settings
         if IPv6:
-                socket_family = socket.AF_INET6
+                socketFamily = socket.AF_INET6
         else:
-                socket_family = socket.AF_INET
+                socketFamily = socket.AF_INET
 
-        socket_type = socket.SOCK_STREAM
+        socketType = socket.SOCK_STREAM
         
         # initialize socket
-        listen_socket = socket.socket(socket_family, socket_type)
-        listen_socket.bind((host, port))
-        listen_socket.listen(5)
+        serverSocket = socket.socket(socketFamily, socketType)
+        serverSocket.bind((host, port))
+        serverSocket.listen(5)
 
         while True:
-                conn, addr = listen_socket.accept()
+                (clientSocket, address) = serverSocket.accept()
                 print("Got connection from ", addr)
                 conn.send(b"Connection confirmed!")
-                conn.close()
+                proxy = proxyConn(clientSocket, timeout)
+                proxy.run()
 
 if __name__ == '__main__':
-        start_server()
+        startServer()
