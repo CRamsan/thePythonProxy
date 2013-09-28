@@ -4,17 +4,18 @@ PROXY_NAME = 'Perry, the Python Proxy'
 HTTP_VERSION = 'HTTP/1.1'
 BUFFER_LENGTH = 1024 * 8
 
-import threading, socket, sys
+import threading, socket, sys, re
 
 class ClientRequest:
 
-        def __init__(self, local_conn, address):
+        def __init__(self, local_conn, address, strip_cache_headers):
 
                 self.local_conn = local_conn
                 self.socket_family = local_conn.family
                 self.socket_type = local_conn.type
                 self.address = address
                 self.port = 80
+                self.strip_cache_headers = strip_cache_headers
 
                 self.client_request = local_conn.recv(BUFFER_LENGTH)
 
@@ -46,7 +47,13 @@ class ClientRequest:
                         modified_first_line = "%s %s %s" % (self.method, requested_file, self.protocol)
                         decoded_request = modified_first_line + decoded_request[first_newline:]
 
-                        self.client_request = str.encode(decoded_request)
+                        if self.strip_cache_headers:
+                                # strip 'If-Modified-Since', 'If-None-Match', and 'Cache-Control' fields
+                                decoded_request = re.sub(r'If-Modified-Since:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
+                                decoded_request = re.sub(r'If-None-Match:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
+                                decoded_request = re.sub(r'Cache-Control:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
+
+                        self.client_request = str.encode(decoded_request)                        
 
                 else:
                         self.method = None
@@ -87,12 +94,12 @@ class ClientRequest:
 
 class ProxyConn:
                 
-        def __init__(self, client_conn, address, timeout):
+        def __init__(self, client_conn, address, strip_cache_headers, timeout):
                 self.client_conn = client_conn
                 self.remote_conn  = None
                 self.timeout = timeout
 
-                self.request = ClientRequest(self.client_conn, address)
+                self.request = ClientRequest(self.client_conn, address, strip_cache_headers)
                 self._execute_request()
 
                 self.client_conn.close()
@@ -101,7 +108,7 @@ class ProxyConn:
                 self.request.execute()
 
 
-def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
+def start_server(host='localhost', port=4444, IPv6=False, strip_cache_headers=True, timeout=30):
 
         # socket settings
         if IPv6:
@@ -120,7 +127,7 @@ def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
         while True:
                 (client_socket, address) = server_socket.accept()
                 print("Proxy connected to client ", address, "\n")
-                threading.Thread(target=ProxyConn, args=(client_socket, address, timeout)).start()
+                threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, timeout)).start()
 
 if __name__ == '__main__':
 
