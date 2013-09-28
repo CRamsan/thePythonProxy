@@ -26,6 +26,7 @@ class ClientRequest:
                         if end != -1: # if newline found, then parse the message
                                 break
 
+                print("--- Client -> Proxy Request ---\n", conn_buffer);
                 split_request = (conn_buffer[:end+1]).split()
                 self.method = split_request[0]
                 self.path = split_request[1]
@@ -45,7 +46,7 @@ class ClientRequest:
 
                         remote_conn = socket.socket(self.socket_family, self.socket_type)
                         remote_conn.connect((host, self.port))
-                        print("--- Request ---\n%s %s %s\nHost: %s\n" % (self.method, requested_file, self.protocol, host))
+                        print("--- Proxy -> Server Request ---\n%s %s %s\nHost: %s\n" % (self.method, requested_file, self.protocol, host))
                         
                         request = str.encode("%s %s %s\nHost: %s\n\n" % (self.method, requested_file, self.protocol, host))
                         request_length = len(request)
@@ -60,7 +61,7 @@ class ClientRequest:
                         while True:
                                 response = remote_conn.recv(BUFFER_LENGTH)
                                 if len(response) > 0:
-                                        print("--- Response ---\n", bytes.decode(response))
+                                        print("--- Server Response ---\n", bytes.decode(response))
                                         self.local_conn.send(response)
                                 else:
                                         break
