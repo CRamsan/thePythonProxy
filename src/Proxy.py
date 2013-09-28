@@ -15,15 +15,6 @@ class ClientRequest:
                 self.socket_type = local_conn.type
                 self.address = address
                 self.port = 80
-#                self.client_request = None
-
-
-                # determine HTTP method type and method parameters
-                # while True:
-                #         conn_buffer += bytes.decode(local_conn.recv(BUFFER_LENGTH))
-                #         end = conn_buffer.find('\n')
-                #         if end != -1: # if newline found, then parse the message
-                #                 break
 
                 self.client_request = local_conn.recv(BUFFER_LENGTH)
 
@@ -32,17 +23,7 @@ class ClientRequest:
                 # modify request file URL (and anonymize, if applicable)
                 self.modify_request(decoded_client_request)
 
-                # split_request = (conn_buffer[:end+1]).split()
-                # self.method = split_request[0]
-                # self.path = split_request[1]
-                # self.protocol = split_request[2]
-
-                # for i in range(0, len(split_request)):
-                #         print(i, ": ", split_request[i])
-
         def modify_request(self, decoded_request, anonymize=False):
-
-                # part_decoded_request = list(decoded_request.partition("\n"))
 
                 first_newline = decoded_request.find('\n')
                 first_line = decoded_request[:first_newline]
@@ -64,13 +45,7 @@ class ClientRequest:
                 
                         modified_first_line = "%s %s %s" % (self.method, requested_file, self.protocol)
                         decoded_request = modified_first_line + decoded_request[first_newline:]
-                
-                        # part_decoded_request[0] = modified_first_line
 
-                        # for i in range(0,len(part_decoded_request)):
-                        #         print(i, ": ", part_decoded_request[i])
-
-                        # self.client_request = str.encode("\n".join(item for item in part_decoded_request))
                         self.client_request = str.encode(decoded_request)
 
                 else:
