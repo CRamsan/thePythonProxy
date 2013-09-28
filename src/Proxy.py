@@ -7,64 +7,64 @@ BUFFER_LENGTH = 1024 * 8
 import threading
 import socket
 
-class clientRequest:
+class client_request:
         def __init__(self, conn, conn_buffer):
                 while 1:
-                        clientBuffer += conn.recv(BUFFER_LENGTH)
-                        end = connBuffer.find('\n')
+                        client_buffer += conn.recv(BUFFER_LENGTH)
+                        end = conn_buffer.find('\n')
                         if end!=-1:
                                 break
-                data = (connBuffer[:end+1]).split()
+                data = (conn_buffer[:end+1]).split()
                 self.method = data[0]
                 self.path = data[1]
                 self.protocol = data [2]
 
 
-class proxyConn:
+class proxy_conn:
                 
-        def __init__(self, clientConn, timeout):
-                self.localConn = conn
-                self.remoteConn  = None
-                self.connBuffer = ''
+        def __init__(self, client_conn, timeout):
+                self.local_conn = conn
+                self.remote_conn  = None
+                self.conn_buffer = ''
                 self.timeout = timeout
 
-                self.request = clientRequest(self.localConn, self.connBuffer)
+                self.request = client_request(self.local_conn, self.conn_buffer)
                 self._forward()
 
-                self._remoteConn.close()
-                self._localConn.close()
+                self._remote_conn.close()
+                self._local_conn.close()
 
         def _forward(self):
                 pass
 
-        def _remoteConnect(self, host):
+        def _remote_connect(self, host):
                 pass
 
-        def _localConnect(self):
+        def _local_connect(self):
                 pass
 
 
-def startServer(host='localhost', port=4444, IPv6=False, timeout=30):
+def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
 
         # socket settings
         if IPv6:
-                socketFamily = socket.AF_INET6
+                socket_family = socket.AF_INET6
         else:
-                socketFamily = socket.AF_INET
+                socket_family = socket.AF_INET
 
-        socketType = socket.SOCK_STREAM
+        socket_type = socket.SOCK_STREAM
         
         # initialize socket
-        serverSocket = socket.socket(socketFamily, socketType)
-        serverSocket.bind((host, port))
-        serverSocket.listen(5)
+        server_socket = socket.socket(socket_family, socket_type)
+        server_socket.bind((host, port))
+        server_socket.listen(5)
 
         while True:
-                (clientSocket, address) = serverSocket.accept()
-                print("Got connection from ", addr)
-                conn.send(b"Connection confirmed!")
-                proxy = proxyConn(clientSocket, timeout)
-                proxy.run()
+                (client_socket, address) = server_socket.accept()
+                print("Got connection from ", address)
+                conn_socket.send(b"Connection confirmed!")
+                proxy = proxy_conn(client_socket, timeout)
+                proxy.start()
 
 if __name__ == '__main__':
-        startServer()
+        start_server()
