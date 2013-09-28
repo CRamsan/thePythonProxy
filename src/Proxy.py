@@ -47,11 +47,17 @@ class ClientRequest:
                         modified_first_line = "%s %s %s" % (self.method, requested_file, self.protocol)
                         decoded_request = modified_first_line + decoded_request[first_newline:]
 
+                        # change "Connection: keep-alive" to "Connection: close" (with 'keep-alive', the recv() from the remote server would take forever,
+                        # since it would block until the remote server closed the connection). Another way to fix the problem would be to actually 
+                        # handle a 'keep-alive' connection properly, but this works for now
+                        decoded_request = re.sub(r'Connection: keep-alive', 'Connection: close', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
+
                         if self.strip_cache_headers:
                                 # strip 'If-Modified-Since', 'If-None-Match', and 'Cache-Control' fields
                                 decoded_request = re.sub(r'If-Modified-Since:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
                                 decoded_request = re.sub(r'If-None-Match:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
                                 decoded_request = re.sub(r'Cache-Control:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
+
 
                         self.client_request = str.encode(decoded_request)                        
 
