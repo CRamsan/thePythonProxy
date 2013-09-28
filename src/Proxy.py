@@ -56,33 +56,26 @@ class ServerSocket:
                 self.sock.bind((host, port))
 
 
-def start_server(host='localhost', port=4444, IPv6=False, timeout=30, handler=ProxyConnection):
+def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
+
+        # socket settings
         if IPv6:
                 socket_family = socket.AF_INET6
         else:
                 socket_family = socket.AF_INET
+
+        socket_type = socket.SOCK_STREAM
         
-        listen_socket = ServerSocket(socket.socket(socket_family, socket.SOCK_STREAM))
-        listen_socket.bind(host, port)
-        listen_socket.sock.listen(5)
+        # initialize socket
+        listen_socket = socket.socket(socket_family, socket_type)
+        listen_socket.bind((host, port))
+        listen_socket.listen(5)
+
         while True:
-                c, addr = listen_socket.sock.accept()
+                conn, addr = listen_socket.accept()
                 print("Got connection from ", addr)
-                c.send(b"Connection confirmed!")
-                c.close()
-
-def test_client():
-        client_sock = socket.socket()
-        host = 'localhost'
-        port = 4444
-        client_sock.connect((host,port))
-        print(client_sock.recv(1024))
-        client_sock.close()
-
-#        thread_count = 0
-#        threading.Thread(target=handler, name="Thread%i" % thread_count, args=(listen_socket.connect(host, port))).start()
-#        thread_count += thread_count + 1
+                conn.send(b"Connection confirmed!")
+                conn.close()
 
 if __name__ == '__main__':
         start_server()
-        test_client()
