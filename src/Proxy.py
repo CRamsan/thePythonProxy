@@ -7,41 +7,85 @@ BUFFER_LENGTH = 1024 * 8
 import threading
 import socket
 
-class client_request:
-        def __init__(self, conn, conn_buffer):
-                while 1:
-                        client_buffer += conn.recv(BUFFER_LENGTH)
+class ClientRequest:
+
+        def __init__(self, local_conn, address):
+
+                self.local_conn = local_conn
+                self.socket_family = local_conn.family
+                self.socket_type = local_conn.type
+                self.address = address
+                self.port = 80
+
+                conn_buffer = ''
+
+                # determine HTTP method type and method parameters
+                while True:
+                        conn_buffer += bytes.decode(local_conn.recv(BUFFER_LENGTH))
                         end = conn_buffer.find('\n')
-                        if end!=-1:
+                        if end != -1: # if newline found, then parse the message
                                 break
-                data = (conn_buffer[:end+1]).split()
-                self.method = data[0]
-                self.path = data[1]
-                self.protocol = data [2]
 
+                split_request = (conn_buffer[:end+1]).split()
+                self.method = split_request[0]
+                self.path = split_request[1]
+                self.protocol = split_request[2]
 
-class proxy_conn:
+        def execute(self):
+
+                try:
+                        # connect to remote server
+                        host_and_file = self.path[self.path.find('//')+2:]
+#                        print("Host+File: ", host_and_file)
+                        backslash_index = host_and_file.find('/')
+                        host = host_and_file[:backslash_index]
+#                        print("Host: ", host)
+                        requested_file = host_and_file[backslash_index:]
+#                        print("File: ", requested_file)
+
+                        remote_conn = socket.socket(self.socket_family, self.socket_type)
+                        remote_conn.connect((host, self.port))
+                        print("--- Request ---\n%s %s %s\nHost: %s\n" % (self.method, requested_file, self.protocol, host))
+                        
+                        request = str.encode("%s %s %s\nHost: %s\n\n" % (self.method, requested_file, self.protocol, host))
+                        request_length = len(request)
+
+                        total_sent = 0
+                        while total_sent < request_length:
+                                sent = remote_conn.send(request[total_sent:])
+                                if sent == 0:
+                                        raise RunTimeError("Socket connection broken.")
+                                total_sent = total_sent + sent
+
+                        while True:
+                                response = remote_conn.recv(BUFFER_LENGTH)
+                                if len(response) > 0:
+                                        print("--- Response ---\n", bytes.decode(response))
+                                        self.local_conn.send(response)
+                                else:
+                                        break
+
+                        remote_conn.close()
                 
-        def __init__(self, client_conn, timeout):
-                self.local_conn = conn
+                except OSError: 
+                        # exit gracefully
+                        pass
+
+
+class ProxyConn:
+                
+        def __init__(self, client_conn, address, timeout):
+                self.client_conn = client_conn
                 self.remote_conn  = None
-                self.conn_buffer = ''
                 self.timeout = timeout
 
-                self.request = client_request(self.local_conn, self.conn_buffer)
-                self._forward()
+                self.request = ClientRequest(self.client_conn, address)
+                self._execute_request()
 
-                self._remote_conn.close()
-                self._local_conn.close()
+                self.client_conn.close()
 
-        def _forward(self):
-                pass
-
-        def _remote_connect(self, host):
-                pass
-
-        def _local_connect(self):
-                pass
+        def _execute_request(self):
+                self.request.execute()
 
 
 def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
@@ -56,15 +100,14 @@ def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
         
         # initialize socket
         server_socket = socket.socket(socket_family, socket_type)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # remove after testing
         server_socket.bind((host, port))
         server_socket.listen(5)
 
         while True:
                 (client_socket, address) = server_socket.accept()
-                print("Got connection from ", address)
-                conn_socket.send(b"Connection confirmed!")
-                proxy = proxy_conn(client_socket, timeout)
-                proxy.start()
+                print("Connected to ", address, "\n")
+                threading.Thread(target=ProxyConn, args=(client_socket, address, timeout)).start()
 
 if __name__ == '__main__':
         start_server()
