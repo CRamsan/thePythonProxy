@@ -44,17 +44,6 @@ class ProxyConnection:
         def _localConnect(self):
                 pass
 
-class ServerSocket:
-
-        def __init__(self, sock=None):
-                if sock is None:
-                        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                else:
-                        self.sock = sock
-
-        def bind(self, host, port):
-                self.sock.bind((host, port))
-
 
 def start_server(host='localhost', port=4444, IPv6=False, timeout=30):
 
