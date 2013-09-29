@@ -8,7 +8,7 @@ import threading, socket, sys, re, signal, datetime, hashlib
 
 class ClientRequest:
 
-    def __init__(self, local_conn, address, strip_cache_headers):
+    def __init__(self, local_conn, address, strip_cache_headers, strip_user_agent):
 
         self.local_conn = local_conn
         self.socket_family = local_conn.family
@@ -16,6 +16,7 @@ class ClientRequest:
         self.address = address
         self.port = 80
         self.strip_cache_headers = strip_cache_headers
+        self.strip_user_agent = strip_user_agent
 
         self.client_request = local_conn.recv(BUFFER_LENGTH)
 
@@ -24,7 +25,7 @@ class ClientRequest:
         # modify request file URL (and anonymize, if applicable)
         self.modify_request(decoded_client_request)
 
-    def modify_request(self, decoded_request, anonymize=False):
+    def modify_request(self, decoded_request):
 
         first_newline = decoded_request.find('\n')
         first_line = decoded_request[:first_newline]
@@ -54,9 +55,13 @@ class ClientRequest:
 
             if self.strip_cache_headers:
                 # strip 'If-Modified-Since', 'If-None-Match', and 'Cache-Control' fields
-                decoded_request = re.sub(r'If-Modified-Since:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
-                decoded_request = re.sub(r'If-None-Match:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
-                decoded_request = re.sub(r'Cache-Control:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE) )
+                decoded_request = re.sub(r'If-Modified-Since:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE))
+                decoded_request = re.sub(r'If-None-Match:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE))
+                decoded_request = re.sub(r'Cache-Control:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE))
+
+            if self.strip_user_agent:
+                # strip 'User-Agent' field
+                decoded_request = re.sub(r'User-Agent:.*?\n', '', decoded_request, flags=(re.IGNORECASE | re.MULTILINE))
 
             self.client_request = str.encode(decoded_request)                        
 
@@ -129,19 +134,19 @@ class ClientRequest:
 
 class ProxyConn:
                 
-    def __init__(self, client_conn, address, strip_cache_headers, timeout, lock, log_file, cache):
+    def __init__(self, client_conn, address, strip_cache_headers, strip_user_agent, timeout, lock, cache):
         self.client_conn = client_conn
         self.remote_conn  = None
         self.timeout = timeout
         self.cache = cache
 
-        self.request = ClientRequest(self.client_conn, address, strip_cache_headers)
+        self.request = ClientRequest(self.client_conn, address, strip_cache_headers, strip_user_agent)
         self.request.execute(lock, cache)
 
         self.client_conn.close()
         
 
-def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip_cache_headers=True, timeout=30):
+def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip_cache_headers=True, strip_user_agent=True, timeout=30):
 
     # socket settings
     if IPv6:
@@ -165,7 +170,7 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
         while True:
             (client_socket, address) = server_socket.accept()
             print("Proxy connected to client ", address, "\n")
-            threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, timeout, lock, log_file, cache)).start()
+            threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, strip_user_agent, timeout, lock, cache)).start()
 
     except:
         print("Closing server socket...")
