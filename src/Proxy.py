@@ -42,9 +42,9 @@ class ClientRequest:
 
             backslash_index = host_and_file.find('/')
             self.host = host_and_file[:backslash_index]
-            requested_file = host_and_file[backslash_index:]
+            self.requested_file = host_and_file[backslash_index:]
                 
-            modified_first_line = "%s %s %s" % (self.method, requested_file, self.protocol)
+            modified_first_line = "%s %s %s" % (self.method, self.requested_file, self.protocol)
             decoded_request = modified_first_line + decoded_request[first_newline:]
 
             # changed "Connection: keep-alive" to "Connection: close" (with 'keep-alive', the recv() from the remote server would take forever,
@@ -116,7 +116,7 @@ class ClientRequest:
                         sent = self.local_conn.send(cached)
                         total_sent += sent
 
-                    print("** Request to %s served from cache.\n" % (ip))
+                    print("** %s%s served from cache.\n" % (self.host, self.requested_file))
 
                 # acquire lock and write to file
                 lock.acquire()
