@@ -171,25 +171,24 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
             (client_socket, address) = server_socket.accept()
             print("Proxy connected to client ", address, "\n")
             threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, strip_user_agent, timeout, lock, cache)).start()
-
+            
+    except KeyboardInterrupt:
+        print("Ctrl+C  detected...")
     except:
-        print("Closing server socket...")
-        server_socket.close()
-        print("Goodbye.")
-        
-def sigint_handler(signal, frame):
+        print("Unexpected exception detected...")
 
-    # close log file
+    print("Closing server socket...")
+    server_socket.close()
     print("\nClosing log file...")
     log_file.close()
-
+    print("Goodbye.")
+        
 log_file = open('proxy.log', 'a')
 cache = {}
 
 if __name__ == '__main__':
         
     print("Starting %s." % (PROXY_NAME))
-    signal.signal(signal.SIGINT, sigint_handler)
 
     if len(sys.argv) > 1:
         start_server(log_file, cache, port=int(sys.argv[1]))
