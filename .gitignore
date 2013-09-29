@@ -36,3 +36,6 @@ nosetests.xml
 
 # emacs
 *~
+
+# log file
+proxy.log
