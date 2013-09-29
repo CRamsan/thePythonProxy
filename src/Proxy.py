@@ -4,7 +4,7 @@ PROXY_NAME = 'Perry, the Python Proxy'
 HTTP_VERSION = 'HTTP/1.1'
 BUFFER_LENGTH = 1024 * 8
 
-import threading, socket, sys, re, signal, datetime
+import threading, socket, sys, re, signal, datetime, hashlib
 
 class ClientRequest:
 
@@ -63,46 +63,65 @@ class ClientRequest:
         else:
             self.method = None
 
-    def execute(self, lock):
+    def execute(self, lock, cache):
 
         try:
-            # connect to remote server
-
+            
             if self.method == 'GET':
-                remote_conn = socket.socket(self.socket_family, self.socket_type)
-                remote_conn.connect((self.host, self.port))
-                print("--- Proxy -> Server Request ---\n%s" % (bytes.decode(self.client_request)))
-                        
-                request_length = len(self.client_request)
-                                
-                total_sent = 0
-                while total_sent < request_length:
-                    sent = remote_conn.send(self.client_request[total_sent:])
-                    if sent == 0:
-                        raise RunTimeError("Socket connection broken.")
-                    total_sent = total_sent + sent
 
+                md5hash = hashlib.md5()
+                md5hash.update(self.client_request)
+                request_digest = md5hash.digest()
                 response_size = 0
-
-                while True:
-                    response = remote_conn.recv(BUFFER_LENGTH)
-                    if len(response) > 0:
-                        response_size += len(response)
-                        print("--- Server Response ---\n%s\n" % repr(response))
-                        self.local_conn.send(response)
-                    else:
-                        break
-                
-                
+            
                 # convert hostname to IP address
                 ip = socket.gethostbyname(self.host)
+                
+                if request_digest not in cache: # connect to remote server
+                    remote_conn = socket.socket(self.socket_family, self.socket_type)
+                    remote_conn.connect((self.host, self.port))
+                    print("--- Proxy -> Server Request ---\n%s" % (bytes.decode(self.client_request)))
+                        
+                    request_length = len(self.client_request)
+                                
+                    total_sent = 0
+                    while total_sent < request_length:
+                        sent = remote_conn.send(self.client_request[total_sent:])
+                        if sent == 0:
+                            raise RunTimeError("Socket connection broken.")
+                        total_sent = total_sent + sent
+
+                    response = b''
+                    while True:
+                        recvd = remote_conn.recv(BUFFER_LENGTH)
+                        if len(recvd) > 0:
+
+                            self.local_conn.send(recvd)
+                            response += recvd
+                        else:
+                            break
+
+                    response_size = len(response)
+                    print("--- Server Response ---\n%s\n" % repr(response))
+                    
+                    remote_conn.close()
+                    cache[request_digest] = response
+                
+                else: #retrieve from cache
+                    cached = cache[request_digest]
+                    response_size = len(cached)
+                    total_sent = 0
+
+                    while total_sent < response_size:
+                        sent = self.local_conn.send(cached)
+                        total_sent += sent
+
+                    print("** Request to %s served from cache.\n" % (ip))
 
                 # acquire lock and write to file
                 lock.acquire()
                 log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
                 lock.release()
-
-                remote_conn.close()
                 
         except OSError: 
             # exit gracefully
@@ -110,22 +129,19 @@ class ClientRequest:
 
 class ProxyConn:
                 
-    def __init__(self, client_conn, address, strip_cache_headers, timeout, lock, log_file):
+    def __init__(self, client_conn, address, strip_cache_headers, timeout, lock, log_file, cache):
         self.client_conn = client_conn
         self.remote_conn  = None
         self.timeout = timeout
+        self.cache = cache
 
         self.request = ClientRequest(self.client_conn, address, strip_cache_headers)
-        self._execute_request(lock)
+        self.request.execute(lock, cache)
 
         self.client_conn.close()
-
-    def _execute_request(self, lock):
-        self.request.execute(lock)
-
         
 
-def start_server(log_file, host='localhost', port=4444, IPv6=False, strip_cache_headers=True, timeout=30):
+def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip_cache_headers=True, timeout=30):
 
     # socket settings
     if IPv6:
@@ -149,7 +165,7 @@ def start_server(log_file, host='localhost', port=4444, IPv6=False, strip_cache_
         while True:
             (client_socket, address) = server_socket.accept()
             print("Proxy connected to client ", address, "\n")
-            threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, timeout, lock, log_file)).start()
+            threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, timeout, lock, log_file, cache)).start()
 
     except:
         print("Closing server socket...")
@@ -163,6 +179,7 @@ def sigint_handler(signal, frame):
     log_file.close()
 
 log_file = open('proxy.log', 'a')
+cache = {}
 
 if __name__ == '__main__':
         
@@ -170,6 +187,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, sigint_handler)
 
     if len(sys.argv) > 1:
-        start_server(log_file, port=int(sys.argv[1]))
+        start_server(log_file, cache, port=int(sys.argv[1]))
     else:
-        start_server()
+        start_server(log_file, cache)
