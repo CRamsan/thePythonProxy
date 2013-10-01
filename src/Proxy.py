@@ -282,8 +282,9 @@ if __name__ == '__main__':
         
     print("Starting %s." % (PROXY_NAME))
 
-    for x in range(1000):
-        y = random.randrange(0,100)
+    while True:
+        y = 0
+        pdb.set_trace()
         cache.put(y,y)
         cache.print_queue()
             #~ if len(sys.argv) > 1:
