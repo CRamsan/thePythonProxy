@@ -9,9 +9,85 @@ import socket
 import sys
 import re
 import signal
+import random
 import datetime
 import hashlib
 import pdb
+
+class Cache:
+    def __init__(self, max_size):
+        self.first = None
+        self.last = None
+        self.table = {}
+        self.max_size = max_size
+    
+    def put(self, uri, content):
+        if uri not in self.table:
+            
+            if(len(self.table) > self.max_size):
+                print ("Object's size is exceeds the limit for this cache")
+                return
+            else:
+                if(len(self.table) + 1 >= self.max_size):
+                    while True:
+                        del_key = self.last[1][1]
+                        pre_entry = self.last[0]
+                        pre_entry[2] = None 
+                        self.last = pre_entry
+                        print (len(self.table))
+                        del self.table[del_key]
+                        print ("Last object removed from the cache")                                        
+                        if(len(self.table) + 1 < self.max_size):
+                            break
+                    
+            if self.first == None:
+                new_first = [None, [content,uri], None]
+                self.first = new_first
+                self.last = new_first
+                self.table[uri] = new_first
+                print ("First object added to the cache")                
+            else:
+                new_first = [None, [content,uri], self.first]
+                self.first[0] = new_first
+                self.table[uri] = new_first
+                self.first = new_first
+                
+                print ("Object set as first in the cache")                
+                
+        else:
+            old_entry = self.table[uri]
+            pre_entry = old_entry[0]
+            next_entry = old_entry[2]
+            
+            if pre_entry == None :
+                print ("Object is already first in cache")
+                return
+            
+            if next_entry != None :
+                next_entry[0] = pre_entry
+ 
+            #~ pdb.set_trace()
+            pre_entry[2] = next_entry
+            
+            del self.table[uri]
+            print ("Object is getting poked")
+            self.put(uri,content)
+    
+    def get(self, uri):
+        if uri in self.table:
+            found = self.table[uri][1][0]
+            self.put(uri,found)
+            return found
+    
+    def print_queue(self):
+        item = self.last
+        counter = 0
+        #print ("dict_keys([", end="")
+        while item[0] != None:
+            #print ("%s, " %item[1][0], end="")
+            item = item[0]
+            counter += 1
+        print(counter)
 
 class HttpRequest:
     def __init__(self, decoded_request):
@@ -99,8 +175,8 @@ class ClientRequest:
                 md5hash.update(str.encode(self.decoded_client_request.request_uri))
                 request_digest = md5hash.digest()
                 response_size = 0
-                            
-                if request_digest not in cache: # connect to remote server
+                
+                if cache.get(request_digest) == None : # connect to remote server
                     remote_conn = socket.socket(self.socket_family, self.socket_type)
                     remote_conn.connect((host, self.port))
                     print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
@@ -121,13 +197,12 @@ class ClientRequest:
 
                     response_size = len(response)
                     print("--- Server Response ---\n%s\n" % repr(response))
-                    #pdb.set_trace()
-                    
+                                    
                     remote_conn.close()
-                    cache[request_digest] = response
+                    cache.put(request_digest, response)
                 
                 else: #retrieve from cache
-                    cached = cache[request_digest]
+                    cached = cache.get(request_digest)
                     response_size = len(cached)
                     total_sent = 0
 
@@ -201,13 +276,17 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
     print("Goodbye.")
         
 log_file = open('proxy.log', 'a')
-cache = {}
+cache = Cache(10)
 
 if __name__ == '__main__':
         
     print("Starting %s." % (PROXY_NAME))
 
-    if len(sys.argv) > 1:
-        start_server(log_file, cache, port=int(sys.argv[1]))
-    else:
-        start_server(log_file, cache)
+    for x in range(1000):
+        y = random.randrange(0,100)
+        cache.put(y,y)
+        cache.print_queue()
+            #~ if len(sys.argv) > 1:
+                #~ start_server(log_file, cache, port=int(sys.argv[1]))
+            #~ else:
+                #~ start_server(log_file, cache)
