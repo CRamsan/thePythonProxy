@@ -44,36 +44,34 @@ class HttpRequest:
         return host_and_file[:backslash_index]
         
     def get_modified_request(self):
-        first_newline = decoded_request.find('\n')
-        first_line = decoded_request[:first_newline]
-        split_first_line = first_line.split()
-        self.method = split_first_line[0]
-        self.path = split_first_line[1]
-        self.protocol = split_first_line[2]
-
-        host_and_file = self.path[self.path.find('//')+2:]
-
-        backslash_index = host_and_file.find('/')
-        self.host = host_and_file[:backslash_index]
-        self.requested_file = host_and_file[backslash_index:]
-            
-        modified_first_line = "%s %s %s" % (self.method, self.requested_file, self.protocol)
-        decoded_request = modified_first_line + decoded_request[first_newline:]
+        modified_request = self.get_modified_request_line()
+        modified_request += self.get_request_headers()
+        modified_request += self.get_message_body()
+        return modified_request
+        
+    def get_original_request(self):
+        original_request = self.get_original_request_line()
+        original_request += self.get_request_headers()
+        original_request += self.get_message_body()
+        return original_request
 
     def get_original_request_line(self):
-        return "%s %s %s" % (self.method, self.request_uri, self.http_version)
+        return "%s %s %s \r\n" % (self.method, self.request_uri, self.http_version)
     
     def get_modified_request_line(self):
-        return "%s %s %s" % (self.method, self.request_uri, self.http_version)
+        host_and_file = self.request_uri[self.request_uri.find('//')+2:]
+        backslash_index = host_and_file.find('/')
+        self.requested_file = host_and_file[backslash_index:]
+        return "%s %s %s \r\n" % (self.method, self.requested_file, self.http_version)
     
     def get_request_headers(self):
-        headers_text = ''
-        for line in tmp:
-            self.request_headers[line.split(':')[0]] = line.split(':')[1].strip()
+        headers_text = ""
+        for param in self.request_headers.keys():
+            headers_text+= ("%s: %s \r\n" % (param, self.request_headers[param]))
         return headers_text
     
     def get_message_body(self):
-        return self.body
+        return (self.message_body+"\r\n")
         
 class ClientRequest:
 
@@ -84,13 +82,13 @@ class ClientRequest:
         self.socket_type = local_conn.type
         self.address = address
         self.port = 80
-         = local_conn.recv(BUFFER_LENGTH)        
-        self.decoded_client_request = HttpRequest(bytes.decode(self.client_request))
+        self.decoded_client_request = HttpRequest(bytes.decode(local_conn.recv(BUFFER_LENGTH)))
         if strip_cache_headers:
             self.decoded_client_request.strip_cache_headers()
         if strip_user_agent:
             self.decoded_client_request.strip_user_agent()
-            
+        print("--- Client -> Proxy ---\n%s" % (self.decoded_client_request.get_original_request()))
+                    
     def execute(self, lock, cache):
         try:
 
@@ -98,22 +96,18 @@ class ClientRequest:
             if self.decoded_client_request.method == 'GET':
 
                 md5hash = hashlib.md5()
-                md5hash.update(self.client_request)
+                md5hash.update(str.encode(self.decoded_client_request.request_uri))
                 request_digest = md5hash.digest()
-                response_size = 01
+                response_size = 0
                             
                 if request_digest not in cache: # connect to remote server
                     remote_conn = socket.socket(self.socket_family, self.socket_type)
                     remote_conn.connect((host, self.port))
-                    print("--- Proxy -> Server Request ---\n%s" % (bytes.decode(self.client_request)))
-                    request_length = len(self.client_request)
+                    print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
+                    request_length = len(self.decoded_client_request.get_modified_request())
                                 
                     total_sent = 0
-                    while total_sent < request_length:
-                        sent = remote_conn.send(self.client_request[total_sent:])
-                        if sent == 0:
-                            raise RunTimeError("Socket connection broken.")
-                        total_sent = total_sent + sent
+                    sent = remote_conn.send(str.encode(self.decoded_client_request.get_modified_request()))
 
                     response = b''
                     while True:
@@ -126,8 +120,8 @@ class ClientRequest:
                             break
 
                     response_size = len(response)
-                    print("--- Server Response ---\n%s\n" % bytes.decode(response))
-                    pdb.set_trace()
+                    print("--- Server Response ---\n%s\n" % repr(response))
+                    #pdb.set_trace()
                     
                     remote_conn.close()
                     cache[request_digest] = response
@@ -141,17 +135,15 @@ class ClientRequest:
                         sent = self.local_conn.send(cached)
                         total_sent += sent
 
-                    print("** %s%s served from cache.\n" % (host, self.requested_file))
+                    print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
 
                 # convert hostname to IP address
-                #
-                
-                #ip = socket.gethostbyname(host)
+                ip = socket.gethostbyname(host)
                 
                 # acquire lock and write to file
-                #lock.acquire()
-                #log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
-                #lock.release()
+                lock.acquire()
+                log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
+                lock.release()
                 
         except OSError: 
             # exit gracefully
