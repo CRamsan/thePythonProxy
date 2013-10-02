@@ -28,16 +28,17 @@ class Cache:
                 print ("Object's size is exceeds the limit for this cache")
                 return
             else:
-                if(len(self.table) + 1 >= self.max_size):
+                if(len(self.table) + 1 > self.max_size):
                     while True:
                         del_key = self.last[1][1]
                         pre_entry = self.last[0]
                         pre_entry[2] = None 
                         self.last = pre_entry
-                        print (len(self.table))
+                        #~ print (len(self.table))
                         del self.table[del_key]
                         print ("Last object removed from the cache")                                        
-                        if(len(self.table) + 1 < self.max_size):
+                        if(len(self.table) + 1 <= self.max_size):
+                            pdb.set_trace()
                             break
                     
             if self.first == None:
@@ -80,14 +81,12 @@ class Cache:
             return found
     
     def print_queue(self):
-        item = self.last
-        counter = 0
-        #print ("dict_keys([", end="")
-        while item[0] != None:
-            #print ("%s, " %item[1][0], end="")
-            item = item[0]
-            counter += 1
-        print(counter)
+        item = self.first
+        print ("%s, " %item[1][0], end="")
+        while item[2] != None:
+            item = item[2]
+            print ("%s, " %item[1][0], end="")
+        print ()
 
 class HttpRequest:
     def __init__(self, decoded_request):
@@ -276,18 +275,20 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
     print("Goodbye.")
         
 log_file = open('proxy.log', 'a')
-cache = Cache(10)
+cache = Cache(4)
 
-if __name__ == '__main__':
-        
+if __name__ == '__main__':        
+    
     print("Starting %s." % (PROXY_NAME))
 
-    while True:
-        y = 0
-        pdb.set_trace()
+    for x in range(100):
+        y = random.randrange(0,8)
+        print ("%s==>" % y)
+        #~ pdb.set_trace()
         cache.put(y,y)
         cache.print_queue()
-            #~ if len(sys.argv) > 1:
-                #~ start_server(log_file, cache, port=int(sys.argv[1]))
-            #~ else:
-                #~ start_server(log_file, cache)
+        print ()
+        #~ if len(sys.argv) > 1:
+            #~ start_server(log_file, cache, port=int(sys.argv[1]))
+        #~ else:
+            #~ start_server(log_file, cache)
