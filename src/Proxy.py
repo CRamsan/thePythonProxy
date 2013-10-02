@@ -8,6 +8,7 @@ import threading
 import socket
 import sys
 import re
+import os
 import signal
 import random
 import datetime
@@ -19,26 +20,27 @@ class Cache:
         self.first = None
         self.last = None
         self.table = {}
+        self.current_size = 0
         self.max_size = max_size
     
-    def put(self, uri, content):
+    def put(self, uri, content, size):
         if uri not in self.table:
             
-            if(len(self.table) > self.max_size):
+            if(size > self.max_size):
                 print ("Object's size is exceeds the limit for this cache")
                 return
             else:
-                if(len(self.table) + 1 > self.max_size):
+                if(self.current_size + size > self.max_size):
                     while True:
                         del_key = self.last[1][1]
                         pre_entry = self.last[0]
-                        pre_entry[2] = None 
                         self.last = pre_entry
-                        #~ print (len(self.table))
                         del self.table[del_key]
+                        pre_entry[2] = None
                         print ("Last object removed from the cache")                                        
-                        if(len(self.table) + 1 <= self.max_size):
-                            pdb.set_trace()
+                        self.delete_file(del_key)                    
+                        self.current_size -= size    
+                        if(self.current_size + size <= self.max_size):
                             break
                     
             if self.first == None:
@@ -52,9 +54,12 @@ class Cache:
                 self.first[0] = new_first
                 self.table[uri] = new_first
                 self.first = new_first
-                
-                print ("Object set as first in the cache")                
-                
+                print ("Object set as first in the cache")
+            
+            if size != 0:
+                self.create_file(uri,content)
+                self.current_size += size
+            
         else:
             old_entry = self.table[uri]
             pre_entry = old_entry[0]
@@ -66,13 +71,16 @@ class Cache:
             
             if next_entry != None :
                 next_entry[0] = pre_entry
- 
-            #~ pdb.set_trace()
+            else:
+                new_last = self.last[0]
+                self.last = new_last
+                self.last[2] = None
+                                 
             pre_entry[2] = next_entry
             
             del self.table[uri]
             print ("Object is getting poked")
-            self.put(uri,content)
+            self.put(uri,content,0)
     
     def get(self, uri):
         if uri in self.table:
@@ -80,13 +88,12 @@ class Cache:
             self.put(uri,found)
             return found
     
-    def print_queue(self):
-        item = self.first
-        print ("%s, " %item[1][0], end="")
-        while item[2] != None:
-            item = item[2]
-            print ("%s, " %item[1][0], end="")
-        print ()
+    def create_file(self, name, data):
+        cache_file = open("cache/"+str(name), 'a')
+        cache_file.write(str(data))
+
+    def delete_file(self, name):
+        os.remove("cache/"+str(name))
 
 class HttpRequest:
     def __init__(self, decoded_request):
@@ -198,7 +205,7 @@ class ClientRequest:
                     print("--- Server Response ---\n%s\n" % repr(response))
                                     
                     remote_conn.close()
-                    cache.put(request_digest, response)
+                    cache.put(request_digest, response, response_size)
                 
                 else: #retrieve from cache
                     cached = cache.get(request_digest)
@@ -275,20 +282,16 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
     print("Goodbye.")
         
 log_file = open('proxy.log', 'a')
-cache = Cache(4)
+cache = Cache(10000)
 
 if __name__ == '__main__':        
+
+    if not os.path.exists('cache'):
+        os.makedirs('cache')
     
     print("Starting %s." % (PROXY_NAME))
 
-    for x in range(100):
-        y = random.randrange(0,8)
-        print ("%s==>" % y)
-        #~ pdb.set_trace()
-        cache.put(y,y)
-        cache.print_queue()
-        print ()
-        #~ if len(sys.argv) > 1:
-            #~ start_server(log_file, cache, port=int(sys.argv[1]))
-        #~ else:
-            #~ start_server(log_file, cache)
+    if len(sys.argv) > 1:
+        start_server(log_file, cache, port=int(sys.argv[1]))
+    else:
+        start_server(log_file, cache)
