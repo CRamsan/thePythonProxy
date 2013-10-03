@@ -15,26 +15,36 @@ import datetime
 import hashlib
 import pdb
 
-'''
-This cache follows a Least-Recently-Used model with all operations running 
-in constant time under optimal circumstances.
-
-Each entry of the cache is a 3-tuple containing: 
-[Pointer_to_previous_entry, [key, size], Pointer_to_next_entry]
-'key' is used as the name of the file that contains the cached data
-'size' is the size in bytes of the content in the file
-
-This structure allows to keep track of all the entries in the way of a queue.
-Each entry is apended at the begining of the queue and when the cache is full
-the last entry is removed
-
-There is also a dictionary that will keep track of each entry, with this we can
-achieve reading operations in constant time.
-'''
-
 class Cache:
+
+    '''
+    This cache follows a Least-Recently-Used model with all operations running 
+    in constant time under optimal circumstances.
+
+    Each entry of the cache contains the following attributes:
+    
+    ``key``
+         the name of the file that contains the cached data
+
+    ``size``
+         the size in bytes of the content in the file
+
+    ``prev_entry``
+         pointer to previous entry
+
+    ``next_entry``
+         pointer to next entry
+
+    This structure allows to keep track of all the entries in the way of a queue. 
+    Each entry is apended at the begining of the queue and when the cache is full
+    the last entry is removed.
+
+    There is also a dictionary that will keep track of each entry, with this we can
+    achieve reading operations in constant time.
+    '''
     
     class Entry:
+
         def __init__(self, key, size, previous_entry, next_entry):
             self.previous_entry = previous_entry
             self.key = key
@@ -59,6 +69,7 @@ class Cache:
                 self.next_entry.print_queue()
     
     def __init__(self, max_size):
+
         self.first = None
         self.last = None
         self.table = {}
@@ -162,6 +173,7 @@ class Cache:
         
 class HttpRequest:
     def __init__(self, decoded_request):
+
         self.method = (decoded_request).splitlines()[0].split()[0]
         self.request_uri = (decoded_request).splitlines()[0].split()[1]
         self.http_version = (decoded_request).splitlines()[0].split()[2]
