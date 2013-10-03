@@ -8,13 +8,193 @@ import threading
 import socket
 import sys
 import re
+import os
+import select
 import signal
+import random
 import datetime
 import hashlib
 import pdb
+from time import sleep
 
+class Cache:
+
+    '''
+    This cache follows a Least-Recently-Used model with all operations running 
+    in constant time under optimal circumstances.
+
+    Each entry of the cache contains the following attributes:
+    
+    ``key``
+         the name of the file that contains the cached data
+
+    ``size``
+         the size in bytes of the content in the file
+
+    ``prev_entry``
+         pointer to previous entry
+
+    ``next_entry``
+         pointer to next entry
+
+    This structure allows to keep track of all the entries in the way of a queue. 
+    Each entry is apended at the begining of the queue and when the cache is full
+    the last entry is removed.
+
+    There is also a dictionary that will keep track of each entry, with this we can
+    achieve reading operations in constant time.
+    '''
+    
+    class Entry:
+
+        def __init__(self, key, size, previous_entry, next_entry):
+            self.previous_entry = previous_entry
+            self.key = key
+            self.size = size
+            self.next_entry = next_entry
+
+        def read_file(self):
+            cache_file = open("cache/"+str(self.key), 'rb')
+            content = cache_file.read()
+            return content
+            
+        def create_file(self, data):
+            cache_file = open("cache/"+str(self.key), 'wb')
+            cache_file.write(data)
+
+        def delete_file(self):
+            os.remove("cache/"+str(self.key))            
+                        
+        def print_queue(self):
+            print (self.key)
+            if self.next_entry != None:
+                self.next_entry.print_queue()
+    
+    def __init__(self, max_size):
+        self.first = None
+        self.last = None
+        self.table = {}
+        self.current_size = 0
+        self.max_size = max_size
+        self.lock = threading.Lock()
+
+    def insert(self, uri, content, size, create=True):
+        if uri not in self.table:
+            if(size > self.max_size):
+                print ("Object's size is exceeds the limit for this cache")
+                return
+            else:
+                # The item fits in the cache but some items need to be removed first
+                if(create and self.current_size + size > self.max_size):
+                    while True:
+                        #Get the size and key of the entry to be removed
+                        del_size = self.last.size
+                        del_key = self.last.key
+                        #Remove the file
+                        self.last.delete_file()                    
+                        #Move the self.last pointer to the previous entry
+                        pre_entry = self.last.previous_entry
+                        self.last = pre_entry 
+                        #Remove a reference to the previous-last entry from
+                        #the dictionary
+                        del self.table[del_key]
+                        #The last entry does not have a 'next' entry
+                        self.last.next_entry = None
+                        #Substract the file size
+                        self.current_size -= del_size
+                        # Check if new entry will fit after last item was removed
+                        if(self.current_size + size <= self.max_size):
+                            break
+                    
+            # Handle if the cache is empty
+            if self.first == None:
+                new_first = self.Entry(uri, size, None, None)
+                self.first = new_first
+                self.last = new_first
+                self.table[uri] = new_first
+                print ("First object added to the cache")                
+            else:
+                #Set the new entry as the first in the queue
+                new_first = self.Entry(uri, size, None, self.first)
+                self.first.previous_entry = new_first
+                self.table[uri] = new_first
+                self.first = new_first
+                print ("Object set as first in the cache")
+            
+            #create=False means the file does not need to be created.
+            if create:
+                self.first.create_file(content)
+                self.current_size += size
+        #If entry is already in queue    
+        else:
+            #Get references for the current entry, as well as the next 
+            #and previous ones
+            old_entry = self.table[uri]
+            pre_entry = old_entry.previous_entry
+            next_entry = old_entry.next_entry
+            
+            if pre_entry == None :
+                print ("Object is already first in cache")
+                return
+            
+            #If the entry is not the last one
+            if next_entry != None :
+                #remove the reference to the current entry by making 
+                #the next entry point straight to the previous entry 
+                next_entry.previous_entry = pre_entry
+            else:
+                #Move the self.last pointer one position and remove the 
+                #reference to the current pointer
+                new_last = self.last.previous_entry
+                self.last = new_last
+                self.last.next_entry = None
+
+            #remove the reference to the current entry by making 
+            #the previous entry point straight to the next entry                                  
+            pre_entry.next_entry = next_entry
+            
+            #remove the last reference to the current entry by removing
+            #the respective entry in the dictionary
+            del self.table[uri]
+
+            #The object is still cached on disk but we have removed all 
+            #references in-memory. Now we will add the entry again, set 
+            #the create flag to denote that the file does not need to be
+            #created again 
+            print ("Object is getting poked")
+            self.put(uri,content,size,False)
+    
+    def put(self, uri, content, size):
+        print ("About to lock")
+        self.lock.acquire()
+        try:
+            self.insert(uri,content,size)
+        except:
+            pass
+        self.lock.release()
+        print ("Lock released")
+    
+    def get(self, uri):
+        print ("About to lock")
+        self.lock.acquire()
+        try:
+            content = None
+            if uri in self.table:
+                found = self.table[uri]
+                self.insert(uri,None,found.size)
+                content = found.read_file()
+        except:
+            pass
+        self.lock.release()
+        print ("Lock released")
+        return content
+    
+    def queue(self):
+        self.first.print_queue()
+        
 class HttpRequest:
     def __init__(self, decoded_request):
+
         self.method = (decoded_request).splitlines()[0].split()[0]
         self.request_uri = (decoded_request).splitlines()[0].split()[1]
         self.http_version = (decoded_request).splitlines()[0].split()[2]
@@ -91,16 +271,15 @@ class ClientRequest:
                     
     def execute(self, lock, cache):
         try:
-
             host = self.decoded_client_request.get_host_name()
             if self.decoded_client_request.method == 'GET':
 
                 md5hash = hashlib.md5()
                 md5hash.update(str.encode(self.decoded_client_request.request_uri))
-                request_digest = md5hash.digest()
+                request_digest = md5hash.hexdigest()
                 response_size = 0
-                            
-                if request_digest not in cache: # connect to remote server
+                
+                if cache.get(request_digest) == None : # connect to remote server
                     remote_conn = socket.socket(self.socket_family, self.socket_type)
                     remote_conn.connect((host, self.port))
                     print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
@@ -121,19 +300,14 @@ class ClientRequest:
 
                     response_size = len(response)
                     print("--- Server Response ---\n%s\n" % repr(response))
-                    #pdb.set_trace()
-                    
+                                    
                     remote_conn.close()
-                    cache[request_digest] = response
+                    cache.put(request_digest, response, response_size)
                 
                 else: #retrieve from cache
-                    cached = cache[request_digest]
+                    cached = cache.get(request_digest)
                     response_size = len(cached)
-                    total_sent = 0
-
-                    while total_sent < response_size:
-                        sent = self.local_conn.send(cached)
-                        total_sent += sent
+                    sent = self.local_conn.send(cached)
 
                     print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
 
@@ -201,12 +375,14 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
     print("Goodbye.")
         
 log_file = open('proxy.log', 'a')
-cache = {}
+cache = Cache(10000)
 
-if __name__ == '__main__':
-        
+if __name__ == '__main__':        
+
+    if not os.path.exists('cache'):
+        os.makedirs('cache')
+    
     print("Starting %s." % (PROXY_NAME))
-
     if len(sys.argv) > 1:
         start_server(log_file, cache, port=int(sys.argv[1]))
     else:
