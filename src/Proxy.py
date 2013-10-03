@@ -280,24 +280,20 @@ class ClientRequest:
         try:
             host = self.decoded_client_request.get_host_name()
 
-                md5hash = hashlib.md5()
-                md5hash.update(str.encode(self.decoded_client_request.request_uri))
-                request_digest = md5hash.hexdigest()
-                response_size = 0
-                
-                if cache.get(request_digest) == None : # connect to remote server
-                    remote_conn = socket.socket(self.socket_family, self.socket_type)
-                    remote_conn.connect((host, self.port))
-                    print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
-                    request_length = len(self.decoded_client_request.get_modified_request())
-                                
-                    total_sent = 0
-                    sent = remote_conn.send(str.encode(self.decoded_client_request.get_modified_request()))
+            md5hash = hashlib.md5()
+            md5hash.update(str.encode(self.decoded_client_request.request_uri))
+            request_digest = md5hash.hexdigest()
+            response_size = 0
+                        
+            #~ if  self.decoded_client_request.method == 'GET' and request_digest in cache:
+            if  False :
+                cached = cache[request_digest]
+                response_size = len(cached)
+                total_sent = 0
 
-                    response = b''
-                    while True:
-                        recvd = remote_conn.recv(BUFFER_LENGTH)
-                        if len(recvd) > 0:
+                while total_sent < response_size:
+                    sent = self.local_conn.send(cached)
+                    total_sent += sent
 
                 print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
             else:
@@ -321,7 +317,7 @@ class ClientRequest:
                     #~ else:
                         #~ break
 
-                time_out_max = 100
+                time_out_max = 10
                 socs = [self.local_conn, remote_conn]
                 count = 0
                 while 1:
@@ -337,8 +333,11 @@ class ClientRequest:
                             else:
                                 out = self.local_conn
                             if data:
+                                print("--- Server -> Proxy  ---\n%s\n" % repr(data))
                                 out.send(data)
                                 count = 0
+                    else:
+                        sleep(0)
                     if count == time_out_max:
                         break
 
@@ -346,11 +345,18 @@ class ClientRequest:
                 print("--- Server -> Proxy  ---\n%s\n" % repr(response))
                 #pdb.set_trace()
                 
-                # acquire lock and write to file
-                lock.acquire()
-                log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
-                lock.release()
-                
+                remote_conn.close()
+                if  self.decoded_client_request.method == 'GET' :
+                    cache.put(request_digest, response, response_size)
+                            
+
+            # convert hostname to IP address
+            ip = socket.gethostbyname(host)
+            
+            # acquire lock and write to file
+            lock.acquire()
+            log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
+            lock.release()
         except OSError: 
             # exit gracefully
             pass
