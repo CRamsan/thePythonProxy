@@ -261,8 +261,15 @@ class ClientRequest:
         self.socket_family = local_conn.family
         self.socket_type = local_conn.type
         self.address = address
-        self.port = 80
+        
         self.decoded_client_request = HttpRequest(bytes.decode(local_conn.recv(BUFFER_LENGTH)))
+
+        i = self.decoded_client_request.get_host_name().find(':')
+        if i!=-1:
+            self.port = int(host[i+1:])
+        else:
+            self.port = 80
+
         if strip_cache_headers:
             self.decoded_client_request.strip_cache_headers()
         if strip_user_agent:
@@ -272,7 +279,6 @@ class ClientRequest:
     def execute(self, lock, cache):
         try:
             host = self.decoded_client_request.get_host_name()
-            if self.decoded_client_request.method == 'GET':
 
                 md5hash = hashlib.md5()
                 md5hash.update(str.encode(self.decoded_client_request.request_uri))
@@ -293,26 +299,52 @@ class ClientRequest:
                         recvd = remote_conn.recv(BUFFER_LENGTH)
                         if len(recvd) > 0:
 
-                            self.local_conn.send(recvd)
-                            response += recvd
-                        else:
-                            break
+                print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
+            else:
+                remote_conn = socket.socket(self.socket_family, self.socket_type)
+                remote_conn.connect((host, self.port))
 
-                    response_size = len(response)
-                    print("--- Server Response ---\n%s\n" % repr(response))
-                                    
-                    remote_conn.close()
-                    cache.put(request_digest, response, response_size)
-                
-                else: #retrieve from cache
-                    cached = cache.get(request_digest)
-                    response_size = len(cached)
-                    sent = self.local_conn.send(cached)
+                if  self.decoded_client_request.method == 'CONNECT':
+                    self.local_conn.send(HTTP_VERSION+' 200 Connection established\nProxy-agent: %s\n\n'%PROXY_NAME)
+                else:
+                    print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
+                    request_length = len(self.decoded_client_request.get_modified_request())                            
+                    remote_conn.send(str.encode(self.decoded_client_request.get_modified_request()))
 
-                    print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
+                response = b''
+                #~ while True:
+                    #~ recvd = remote_conn.recv(BUFFER_LENGTH)
+                    #~ if len(recvd) > 0:
+#~ 
+                        #~ self.local_conn.send(recvd)
+                        #~ response += recvd
+                    #~ else:
+                        #~ break
 
-                # convert hostname to IP address
-                ip = socket.gethostbyname(host)
+                time_out_max = 100
+                socs = [self.local_conn, remote_conn]
+                count = 0
+                while 1:
+                    count += 1
+                    (recv, _, error) = select.select(socs, [], socs, 3)
+                    if error:
+                        break
+                    if recv:
+                        for in_ in recv:
+                            data = in_.recv(BUFFER_LENGTH)
+                            if in_ is self.local_conn:
+                                out = remote_conn
+                            else:
+                                out = self.local_conn
+                            if data:
+                                out.send(data)
+                                count = 0
+                    if count == time_out_max:
+                        break
+
+                response_size = len(response)
+                print("--- Server -> Proxy  ---\n%s\n" % repr(response))
+                #pdb.set_trace()
                 
                 # acquire lock and write to file
                 lock.acquire()
