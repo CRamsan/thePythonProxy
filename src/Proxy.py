@@ -42,13 +42,13 @@ class Cache:
             self.next_entry = next_entry
 
         def read_file(self):
-            cache_file = open("cache/"+str(self.key), 'rt')
+            cache_file = open("cache/"+str(self.key), 'rb')
             content = cache_file.read()
             return content
             
         def create_file(self, data):
-            cache_file = open("cache/"+str(self.key), 'a')
-            cache_file.write(str(data))
+            cache_file = open("cache/"+str(self.key), 'wb')
+            cache_file.write(data)
 
         def delete_file(self):
             os.remove("cache/"+str(self.key))            
@@ -153,8 +153,8 @@ class Cache:
     
     def get(self, uri):
         if uri in self.table:
-            found = self.table[uri][1][0]
-            self.put(uri,found)
+            found = self.table[uri]
+            self.put(uri,None,found.size)
             return found.read_file()
     
     def queue(self):
@@ -275,11 +275,7 @@ class ClientRequest:
                 else: #retrieve from cache
                     cached = cache.get(request_digest)
                     response_size = len(cached)
-                    total_sent = 0
-
-                    while total_sent < response_size:
-                        sent = self.local_conn.send(cached)
-                        total_sent += sent
+                    sent = self.local_conn.send(cached)
 
                     print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
 
@@ -347,7 +343,7 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
     print("Goodbye.")
         
 log_file = open('proxy.log', 'a')
-cache = Cache(1000000)
+cache = Cache(10000)
 
 if __name__ == '__main__':        
 
