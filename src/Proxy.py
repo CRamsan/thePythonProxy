@@ -15,7 +15,49 @@ import datetime
 import hashlib
 import pdb
 
+'''
+This cache follows a Least-Recently-Used model with all operations running 
+in constant time under optimal circumstances.
+
+Each entry of the cache is a 3-tuple containing: 
+[Pointer_to_previous_entry, [key, size], Pointer_to_next_entry]
+'key' is used as the name of the file that contains the cached data
+'size' is the size in bytes of the content in the file
+
+This structure allows to keep track of all the entries in the way of a queue.
+Each entry is apended at the begining of the queue and when the cache is full
+the last entry is removed
+
+There is also a dictionary that will keep track of each entry, with this we can
+achieve reading operations in constant time.
+'''
+
 class Cache:
+    
+    class Entry:
+        def __init__(self, key, size, previous_entry, next_entry):
+            self.previous_entry = previous_entry
+            self.key = key
+            self.size = size
+            self.next_entry = next_entry
+
+        def read_file(self):
+            cache_file = open("cache/"+str(self.key), 'rt')
+            content = cache_file.read()
+            return content
+            
+        def create_file(self, data):
+            cache_file = open("cache/"+str(self.key), 'a')
+            cache_file.write(str(data))
+
+        def delete_file(self):
+            os.remove("cache/"+str(self.key))            
+                        
+        def print_queue(self):
+            print (self.key)
+            if self.next_entry != None:
+                self.next_entry.print_queue()
+    
     def __init__(self, max_size):
         self.first = None
         self.last = None
@@ -23,78 +65,101 @@ class Cache:
         self.current_size = 0
         self.max_size = max_size
     
-    def put(self, uri, content, size):
+    def put(self, uri, content, size, create=True):
         if uri not in self.table:
-            
             if(size > self.max_size):
                 print ("Object's size is exceeds the limit for this cache")
                 return
             else:
-                if(self.current_size + size > self.max_size):
+                # The item fits in the cache but some items need to be removed first
+                if(create and self.current_size + size > self.max_size):
                     while True:
-                        del_key = self.last[1][1]
-                        pre_entry = self.last[0]
-                        self.last = pre_entry
+                        #Get the size and key of the entry to be removed
+                        del_size = self.last.size
+                        del_key = self.last.key
+                        #Remove the file
+                        self.last.delete_file()                    
+                        #Move the self.last pointer to the previous entry
+                        pre_entry = self.last.previous_entry
+                        self.last = pre_entry 
+                        #Remove a reference to the previous-last entry from
+                        #the dictionary
                         del self.table[del_key]
-                        pre_entry[2] = None
-                        print ("Last object removed from the cache")                                        
-                        self.delete_file(del_key)                    
-                        self.current_size -= size    
+                        #The last entry does not have a 'next' entry
+                        self.last.next_entry = None
+                        #Substract the file size
+                        self.current_size -= del_size
+                        # Check if new entry will fit after last item was removed
                         if(self.current_size + size <= self.max_size):
                             break
                     
+            # Handle if the cache is empty
             if self.first == None:
-                new_first = [None, [content,uri], None]
+                new_first = self.Entry(uri, size, None, None)
                 self.first = new_first
                 self.last = new_first
                 self.table[uri] = new_first
                 print ("First object added to the cache")                
             else:
-                new_first = [None, [content,uri], self.first]
-                self.first[0] = new_first
+                #Set the new entry as the first in the queue
+                new_first = self.Entry(uri, size, None, self.first)
+                self.first.previous_entry = new_first
                 self.table[uri] = new_first
                 self.first = new_first
                 print ("Object set as first in the cache")
             
-            if size != 0:
-                self.create_file(uri,content)
+            #create=False means the file does not need to be created.
+            if create:
+                self.first.create_file(content)
                 self.current_size += size
-            
+        #If entry is already in queue    
         else:
+            #Get references for the current entry, as well as the next 
+            #and previous ones
             old_entry = self.table[uri]
-            pre_entry = old_entry[0]
-            next_entry = old_entry[2]
+            pre_entry = old_entry.previous_entry
+            next_entry = old_entry.next_entry
             
             if pre_entry == None :
                 print ("Object is already first in cache")
                 return
             
+            #If the entry is not the last one
             if next_entry != None :
-                next_entry[0] = pre_entry
+                #remove the reference to the current entry by making 
+                #the next entry point straight to the previous entry 
+                next_entry.previous_entry = pre_entry
             else:
-                new_last = self.last[0]
+                #Move the self.last pointer one position and remove the 
+                #reference to the current pointer
+                new_last = self.last.previous_entry
                 self.last = new_last
-                self.last[2] = None
-                                 
-            pre_entry[2] = next_entry
+                self.last.next_entry = None
+
+            #remove the reference to the current entry by making 
+            #the previous entry point straight to the next entry                                  
+            pre_entry.next_entry = next_entry
             
+            #remove the last reference to the current entry by removing
+            #the respective entry in the dictionary
             del self.table[uri]
+
+            #The object is still cached on disk but we have removed all 
+            #references in-memory. Now we will add the entry again, set 
+            #the create flag to denote that the file does not need to be
+            #created again 
             print ("Object is getting poked")
-            self.put(uri,content,0)
+            self.put(uri,content,size,False)
     
     def get(self, uri):
         if uri in self.table:
             found = self.table[uri][1][0]
             self.put(uri,found)
-            return found
+            return found.read_file()
     
-    def create_file(self, name, data):
-        cache_file = open("cache/"+str(name), 'a')
-        cache_file.write(str(data))
-
-    def delete_file(self, name):
-        os.remove("cache/"+str(name))
-
+    def queue(self):
+        self.first.print_queue()
+        
 class HttpRequest:
     def __init__(self, decoded_request):
         self.method = (decoded_request).splitlines()[0].split()[0]
@@ -282,7 +347,7 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
     print("Goodbye.")
         
 log_file = open('proxy.log', 'a')
-cache = Cache(10000)
+cache = Cache(1000000)
 
 if __name__ == '__main__':        
 
@@ -290,7 +355,6 @@ if __name__ == '__main__':
         os.makedirs('cache')
     
     print("Starting %s." % (PROXY_NAME))
-
     if len(sys.argv) > 1:
         start_server(log_file, cache, port=int(sys.argv[1]))
     else:
