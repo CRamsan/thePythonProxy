@@ -9,11 +9,13 @@ import socket
 import sys
 import re
 import os
+import select
 import signal
 import random
 import datetime
 import hashlib
 import pdb
+from time import sleep
 
 class Cache:
 
@@ -69,14 +71,14 @@ class Cache:
                 self.next_entry.print_queue()
     
     def __init__(self, max_size):
-
         self.first = None
         self.last = None
         self.table = {}
         self.current_size = 0
         self.max_size = max_size
-    
-    def put(self, uri, content, size, create=True):
+        self.lock = threading.Lock()
+
+    def insert(self, uri, content, size, create=True):
         if uri not in self.table:
             if(size > self.max_size):
                 print ("Object's size is exceeds the limit for this cache")
@@ -162,11 +164,30 @@ class Cache:
             print ("Object is getting poked")
             self.put(uri,content,size,False)
     
+    def put(self, uri, content, size):
+        print ("About to lock")
+        self.lock.acquire()
+        try:
+            self.insert(uri,content,size)
+        except:
+            pass
+        self.lock.release()
+        print ("Lock released")
+    
     def get(self, uri):
-        if uri in self.table:
-            found = self.table[uri]
-            self.put(uri,None,found.size)
-            return found.read_file()
+        print ("About to lock")
+        self.lock.acquire()
+        try:
+            content = None
+            if uri in self.table:
+                found = self.table[uri]
+                self.insert(uri,None,found.size)
+                content = found.read_file()
+        except:
+            pass
+        self.lock.release()
+        print ("Lock released")
+        return content
     
     def queue(self):
         self.first.print_queue()
@@ -250,7 +271,6 @@ class ClientRequest:
                     
     def execute(self, lock, cache):
         try:
-
             host = self.decoded_client_request.get_host_name()
             if self.decoded_client_request.method == 'GET':
 
