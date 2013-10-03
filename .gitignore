@@ -39,3 +39,6 @@ nosetests.xml
 
 # log file
 proxy.log
+
+# cache files
+cache/

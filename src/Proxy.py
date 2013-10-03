@@ -179,7 +179,7 @@ class ClientRequest:
 
                 md5hash = hashlib.md5()
                 md5hash.update(str.encode(self.decoded_client_request.request_uri))
-                request_digest = md5hash.digest()
+                request_digest = md5hash.hexdigest()
                 response_size = 0
                 
                 if cache.get(request_digest) == None : # connect to remote server
