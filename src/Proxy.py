@@ -433,7 +433,7 @@ def start_server(host='localhost', port=4444, IPv6=False, strip_cache_headers=Tr
     print("Closing server socket...")
     server_socket.close()
     print("\nClosing log file...")
-    log_file.close()
+    log.close()
     print("Goodbye.")
         
 
