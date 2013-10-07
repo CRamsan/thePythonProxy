@@ -82,7 +82,7 @@ class Cache:
                             break
                     
             # Handle if the cache is empty
-            if self.first == None:
+            if self.first is None:
                 new_first = self.Entry(uri, size, None, None)
                 self.first = new_first
                 self.last = new_first
@@ -108,12 +108,12 @@ class Cache:
             pre_entry = old_entry.previous_entry
             next_entry = old_entry.next_entry
             
-            if pre_entry == None :
+            if pre_entry is None :
                 print ("Object is already first in cache")
                 return
             
             #If the entry is not the last one
-            if next_entry != None :
+            if next_entry is not None :
                 #remove the reference to the current entry by making 
                 #the next entry point straight to the previous entry 
                 next_entry.previous_entry = pre_entry
@@ -191,7 +191,7 @@ class Cache:
                         
         def print_queue(self):
             print (self.key)
-            if self.next_entry != None:
+            if self.next_entry is not None:
                 self.next_entry.print_queue()
         
 class HttpRequest:
