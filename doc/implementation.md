@@ -17,10 +17,9 @@ Main classes:
   all the data relay happens between client and server and also where the cache is used.
 
 -ProxyConn
-  The ClientRequest object is the entire lifecycle of a client requestion a website through this proxy. 
-  This object will contain the socket of the client connection, then a ClientRequest object will be 
-  created to handle the request and once that is completed the connection with the client will be 
-  closed.
+  The ProxyConn object is the entire lifecycle of a client requesting a website through this proxy. 
+  This object will recieve the socket of the client, then a ClientRequest object will be created 
+  to handle the request and once that is completed the connection with the client will be closed.
 
 
 The script will start by initializing the  cache and the log file. Once those are secure the first 
