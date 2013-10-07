@@ -272,7 +272,21 @@ class ClientRequest:
         self.socket_family = local_conn.family
         self.socket_type = local_conn.type
         self.address = address
-        self.decoded_client_request = HttpRequest(bytes.decode(local_conn.recv(BUFFER_LENGTH)))
+
+        # local_request = b''
+        # while True:
+        #     recvd = local_conn.recv(BUFFER_LENGTH)
+        #     if len(recvd) > 0:
+        #         local_request += recvd
+        #     else:
+        #         break
+        local_request  = local_conn.recv(BUFFER_LENGTH)
+
+        # if empty, throw exception
+        if local_request == b'':
+            raise InvalidRequest("Request is empty.")
+
+        self.decoded_client_request = HttpRequest(bytes.decode(local_request))
         self.port = self.decoded_client_request.get_port()
 
         if strip_cache_headers:
@@ -359,10 +373,17 @@ class ProxyConn:
         self.timeout = timeout
         self.cache = cache
 
-        self.request = ClientRequest(self.client_conn, address, strip_cache_headers, strip_user_agent)
-        self.request.execute(log, cache)
+        try:
+            self.request = ClientRequest(self.client_conn, address, strip_cache_headers, strip_user_agent)
+            self.request.execute(log, cache)
+        except InvalidRequest:
+            self.client_conn.close()
 
-        self.client_conn.close()
+class InvalidRequest(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
 
 class Log:
 
