@@ -220,7 +220,7 @@ class HttpRequest:
 
     def set_connection_close(self):
         if 'Proxy-Connection' in self.request_headers and self.request_headers['Proxy-Connection'] == 'Keep-Alive':
-            self.request_headers['Proxy-Connection'] = 'Close'
+                self.request_headers['Proxy-Connection'] = 'Close'
         
     def strip_user_agent(self):
         del self.request_headers['User-Agent']
@@ -229,6 +229,14 @@ class HttpRequest:
         host_and_file = self.request_uri[self.request_uri.find('//')+2:]
         backslash_index = host_and_file.find('/')
         return host_and_file[:backslash_index]
+
+    def get_port(self):
+        host = self.get_host_name()
+        i = host.find(':')
+        if i != -1:
+            return int(host[i+1:])
+        else:
+            return 80
         
     def get_modified_request(self):
         modified_request = self.get_modified_request_line()
@@ -268,34 +276,29 @@ class ClientRequest:
         self.socket_family = local_conn.family
         self.socket_type = local_conn.type
         self.address = address
-        
-
         self.decoded_client_request = HttpRequest(bytes.decode(local_conn.recv(BUFFER_LENGTH)))
-
-        self.port = 80
-        # i = self.decoded_client_request.get_host_name().find(':')
-        # if i!=-1:
-        #     self.port = int(host[i+1:])
-        # else:
-        #     self.port = 80
+        self.port = decoded_client_request.get_port()
 
         if strip_cache_headers:
             self.decoded_client_request.strip_cache_headers()
         if strip_user_agent:
             self.decoded_client_request.strip_user_agent()
+
+        # use non-persistent HTTP connection
         self.decoded_client_request.set_connection_close()
             
-        print("--- Client -> Proxy ---\n%s" % (self.decoded_client_request.get_original_request()))
+        print("--- Client -> Proxy Request ---\n%s" % (self.decoded_client_request.get_original_request()))
                     
     def execute(self, log, cache):
         try:
-            host = self.decoded_client_request.get_host_name()
-
             md5hash = hashlib.md5()
-            md5hash.update(str.encode(self.decoded_client_request.request_uri))
+            md5hash.update(str.encode(self.decoded_client_request.get_modified_request()))
             request_digest = md5hash.hexdigest()
             response_size = 0
-                        
+
+            host = self.decoded_client_request.get_host_name()
+
+            # if request has been cached, return the response to the client directly from the cache
             if  self.decoded_client_request.method == 'GET' and request_digest in cache.table:
                 cached = cache.get(request_digest)
                 response_size = len(cached)
@@ -305,61 +308,41 @@ class ClientRequest:
                     sent = self.local_conn.send(cached)
                     total_sent += sent
 
-                #~ print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
-                #~ print("---  Served From Cache  --- \n%s\n" % (self.decoded_client_request.request_uri))
-            else:
+                # TODO: invoke touch() on cache[request_digest]
+            else: 
                 remote_conn = socket.socket(self.socket_family, self.socket_type)
                 remote_conn.connect((host, self.port))
 
                 if  self.decoded_client_request.method == 'CONNECT':
                     self.local_conn.send(HTTP_VERSION+' 200 Connection established\nProxy-agent: %s\n\n'%PROXY_NAME)
                 else:
-                    #~ print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
-                    request_length = len(self.decoded_client_request.get_modified_request())                            
-                    remote_conn.send(str.encode(self.decoded_client_request.get_modified_request()))
+                    # method is 'GET'
+                    print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
+                    request_size = len(self.decoded_client_request.get_modified_request())                            
+                    total_sent = 0
+
+                    while total_sent < request_size:
+                        sent = remote_conn.send(str.encode(self.decoded_client_request.get_modified_request()))
+                        total_sent += sent
 
                 response = b''
                 while True:
                     recvd = remote_conn.recv(BUFFER_LENGTH)
                     if len(recvd) > 0:
-
                         self.local_conn.send(recvd)
                         response += recvd
                     else:
                         break
 
-                #~ time_out_max = 2
-                #~ socs = [self.local_conn, remote_conn]
-                #~ count = 0
-                #~ while 1:
-                    #~ count += 1
-                    #~ (recv, _, error) = select.select(socs, [], socs, 1)
-                    #~ if error:
-                        #~ break
-                    #~ if recv:
-                        #~ for in_ in recv:
-                            #~ data = in_.recv(BUFFER_LENGTH)
-                            #~ if in_ is self.local_conn:
-                                #~ out = remote_conn
-                            #~ else:
-                                #~ out = self.local_conn
-                            #~ if data:
-                                #~ print("--- Server -> Proxy  ---\n%s\n" % repr(data))
-                                #~ out.send(data)
-                                #~ count = 0
-                    #~ else:
-                        #~ sleep(0)
-                    #~ if count == time_out_max:
-                        #~ break
-
                 response_size = len(response)
-                #~ print("--- Server -> Proxy  ---\n%s\n" % repr(response))
+                print("--- Server Response ---\n%s\n" % repr(response))
                 
                 remote_conn.close()
+
+                # add response to cache
                 if  self.decoded_client_request.method == 'GET' :
                     cache.put(request_digest, response, response_size)
                             
-
             # convert hostname to IP address
             ip = socket.gethostbyname(host)
             
