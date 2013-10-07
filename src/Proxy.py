@@ -60,7 +60,7 @@ class Cache:
             #Get references for the current entry, as well as the next 
             #and previous ones
             touch_entry = self.table[hashid]
-            touch_entry.acquire_lock()
+            #touch_entry.acquire_lock()
 
             prev_entry = touch_entry.prev_entry
             next_entry = touch_entry.next_entry
@@ -89,7 +89,7 @@ class Cache:
             prev_entry = None
             self.first = touch_entry
 
-            touch_entry.release_lock()
+            #touch_entry.release_lock()
             print("%s moved to front of cache.\n" % (hashid))
 
     def insert(self, hashid, content, size):
@@ -218,8 +218,10 @@ class HttpRequest:
             del self.request_headers['Cache-Control']
 
     def set_connection_close(self):
-        if 'Connection' in self.request_headers and self.request_headers['Connection'] == 'keep-alive':
+        if 'Connection' in self.request_headers:
                 self.request_headers['Connection'] = 'close'
+        if 'Proxy-Connection' in self.request_headers:
+                self.request_headers['Proxy-Connection'] = 'close'
         
     def strip_user_agent(self):
         del self.request_headers['User-Agent']
