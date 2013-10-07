@@ -45,31 +45,6 @@ class Cache:
     achieve reading operations in constant time.
     '''
     
-    class Entry:
-
-        def __init__(self, key, size, previous_entry, next_entry):
-            self.previous_entry = previous_entry
-            self.key = key
-            self.size = size
-            self.next_entry = next_entry
-
-        def read_file(self):
-            cache_file = open("cache/"+str(self.key), 'rb')
-            content = cache_file.read()
-            return content
-            
-        def create_file(self, data):
-            cache_file = open("cache/"+str(self.key), 'wb')
-            cache_file.write(data)
-
-        def delete_file(self):
-            os.remove("cache/"+str(self.key))            
-                        
-        def print_queue(self):
-            print (self.key)
-            if self.next_entry != None:
-                self.next_entry.print_queue()
-    
     def __init__(self, max_size):
         self.first = None
         self.last = None
@@ -191,6 +166,33 @@ class Cache:
     
     def queue(self):
         self.first.print_queue()
+
+    class Entry:
+
+        def __init__(self, key, size, previous_entry, next_entry):
+            self.previous_entry = previous_entry
+            self.key = key
+            self.size = size
+            self.next_entry = next_entry
+
+        def read_file(self):
+            cache_file = open("cache/"+str(self.key), 'rb')
+            content = cache_file.read()
+            cache_file.close()
+            return content
+            
+        def create_file(self, data):
+            cache_file = open("cache/"+str(self.key), 'wb')
+            cache_file.write(data)
+            cach_file.close()
+
+        def delete_file(self):
+            os.remove("cache/"+str(self.key))            
+                        
+        def print_queue(self):
+            print (self.key)
+            if self.next_entry != None:
+                self.next_entry.print_queue()
         
 class HttpRequest:
     def __init__(self, decoded_request):
