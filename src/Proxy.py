@@ -321,6 +321,7 @@ class ClientRequest:
             else: 
                 remote_conn = socket.socket(self.socket_family, self.socket_type)
                 remote_conn.connect((host, self.port))
+                remote_conn.settimeout(10.0)
 
                 if  self.decoded_client_request.method == 'CONNECT':
                     self.local_conn.send(HTTP_VERSION+' 200 Connection established\nProxy-agent: %s\n\n'%PROXY_NAME)
