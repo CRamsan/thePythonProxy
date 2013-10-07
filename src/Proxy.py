@@ -174,6 +174,7 @@ class Cache:
             self.key = key
             self.size = size
             self.next_entry = next_entry
+            self.lock = threading.Lock()
 
         def read_file(self):
             cache_file = open("cache/"+str(self.key), 'rb')
@@ -193,6 +194,12 @@ class Cache:
             print (self.key)
             if self.next_entry is not None:
                 self.next_entry.print_queue()
+
+        def lock(self):
+            self.lock.acquire()
+
+        def unlock(self):
+            self.lock.release()
         
 class HttpRequest:
 
