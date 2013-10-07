@@ -89,6 +89,7 @@ class Cache:
             self.first = touch_entry
 
             touch_entry.release_lock()
+            print("%s moved to front of cache.\n" % (hashid))
 
     def insert(self, hashid, content, size):
 
@@ -115,6 +116,7 @@ class Cache:
                         #the dictionary
                         old_last.release_lock()
                         del self.table[del_key]
+                        print("%s removed from cache.\n" % (del_key))
                         #The last entry does not have a 'next' entry
                         self.last.next_entry = None
                         #Substract the file size
@@ -129,7 +131,6 @@ class Cache:
             if self.first is None:
                 new_first = self.Entry(hashid, size, None, None)
                 self.last = new_first
-                print ("First object added to the cache")                
             else:
                 #Set the new entry as the first in the queue
                 new_first = self.Entry(hashid, size, None, self.first)
@@ -139,6 +140,7 @@ class Cache:
             self.table[hashid] = new_first
             self.first.create_file(content)
             self.current_size += size
+            print("%s added to cache.\n" % (hashid))
 
         #If entry is already in queue    
         else:
@@ -273,13 +275,6 @@ class ClientRequest:
         self.socket_type = local_conn.type
         self.address = address
 
-        # local_request = b''
-        # while True:
-        #     recvd = local_conn.recv(BUFFER_LENGTH)
-        #     if len(recvd) > 0:
-        #         local_request += recvd
-        #     else:
-        #         break
         local_request  = local_conn.recv(BUFFER_LENGTH)
 
         # if empty, throw exception
@@ -318,7 +313,7 @@ class ClientRequest:
                     sent = self.local_conn.send(cached)
                     total_sent += sent
 
-                cache.touch(request_digest)
+                print("%s forwarded from cache.\n" % (request_digest))
 
             else: 
                 remote_conn = socket.socket(self.socket_family, self.socket_type)
@@ -347,7 +342,7 @@ class ClientRequest:
 
                 response_size = len(response)
                 # print("--- Server Response ---\n%s\n" % repr(response))
-                print("--- Server Response ---\n")
+                print("--- Server Response Fowarded ---\n")
                 
                 remote_conn.close()
 
