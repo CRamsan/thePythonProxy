@@ -376,7 +376,9 @@ class ProxyConn:
             self.request = ClientRequest(self.client_conn, address, strip_cache_headers, strip_user_agent)
             self.request.execute(log, cache)
         except InvalidRequest:
-            self.client_conn.close()
+            pass
+
+        self.client_conn.close()
 
 class InvalidRequest(Exception):
     def __init__(self, value):
