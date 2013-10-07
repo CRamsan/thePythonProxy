@@ -270,12 +270,15 @@ class ClientRequest:
         self.socket_type = local_conn.type
         self.address = address
         
+
         self.decoded_client_request = HttpRequest(bytes.decode(local_conn.recv(BUFFER_LENGTH)))
-        i = self.decoded_client_request.get_host_name().find(':')
-        if i!=-1:
-            self.port = int(host[i+1:])
-        else:
-            self.port = 80
+
+        self.port = 80
+        # i = self.decoded_client_request.get_host_name().find(':')
+        # if i!=-1:
+        #     self.port = int(host[i+1:])
+        # else:
+        #     self.port = 80
 
         if strip_cache_headers:
             self.decoded_client_request.strip_cache_headers()
@@ -285,7 +288,7 @@ class ClientRequest:
             
         print("--- Client -> Proxy ---\n%s" % (self.decoded_client_request.get_original_request()))
                     
-    def execute(self, lock, cache):
+    def execute(self, log, cache):
         try:
             host = self.decoded_client_request.get_host_name()
 
@@ -362,28 +365,40 @@ class ClientRequest:
             ip = socket.gethostbyname(host)
             
             # acquire lock and write to file
-            lock.acquire()
-            log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
-            lock.release()
+            log.append(ip, response_size)
+
         except OSError: 
             # exit gracefully
             pass
 
 class ProxyConn:
                 
-    def __init__(self, client_conn, address, strip_cache_headers, strip_user_agent, timeout, lock, cache):
+    def __init__(self, client_conn, address, strip_cache_headers, strip_user_agent, timeout, log, cache):
         self.client_conn = client_conn
         self.remote_conn  = None
         self.timeout = timeout
         self.cache = cache
 
         self.request = ClientRequest(self.client_conn, address, strip_cache_headers, strip_user_agent)
-        self.request.execute(lock, cache)
+        self.request.execute(log, cache)
 
         self.client_conn.close()
-        
 
-def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip_cache_headers=True, strip_user_agent=True, timeout=30):
+class Log:
+
+    def __init__(self):
+        self.log_file = open('proxy.log', 'a')
+        self.log_lock = threading.Lock()
+
+    def close(self):
+        self.log_file.close()
+
+    def append(self, ip, response_size):
+        self.log_lock.acquire()
+        self.log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
+        self.log_lock.release()
+
+def start_server(host='localhost', port=4444, IPv6=False, strip_cache_headers=True, strip_user_agent=True, timeout=30):
 
     # socket settings
     if IPv6:
@@ -392,6 +407,10 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
         socket_family = socket.AF_INET
 
     socket_type = socket.SOCK_STREAM
+
+    # initialize log and cache
+    log = Log()
+    cache = Cache(100000)
         
     try:
 
@@ -401,13 +420,10 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
         server_socket.bind((host, port))
         server_socket.listen(5)
 
-        # create lock file
-        lock = threading.Lock()
-
         while True:
             (client_socket, address) = server_socket.accept()
             print("Proxy connected to client ", address, "\n")
-            threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, strip_user_agent, timeout, lock, cache)).start()
+            threading.Thread(target=ProxyConn, args=(client_socket, address, strip_cache_headers, strip_user_agent, timeout, log, cache)).start()
             
     except KeyboardInterrupt:
         print("Ctrl+C  detected...")
@@ -420,8 +436,6 @@ def start_server(log_file, cache, host='localhost', port=4444, IPv6=False, strip
     log_file.close()
     print("Goodbye.")
         
-log_file = open('proxy.log', 'a')
-cache = Cache(100000)
 
 if __name__ == '__main__':        
 
@@ -430,6 +444,6 @@ if __name__ == '__main__':
     
     print("Starting %s." % (PROXY_NAME))
     if len(sys.argv) > 1:
-        start_server(log_file, cache, port=int(sys.argv[1]))
+        start_server(port=int(sys.argv[1]))
     else:
-        start_server(log_file, cache)
+        start_server()
