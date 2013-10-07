@@ -3,6 +3,7 @@
 PROXY_NAME = 'Perry, the Python Proxy'
 HTTP_VERSION = 'HTTP/1.1'
 BUFFER_LENGTH = 1024 * 8
+CACHE_SIZE = 200000
 
 import threading
 import socket
@@ -406,7 +407,7 @@ def start_server(host='localhost', port=4444, IPv6=False, strip_cache_headers=Tr
 
     # initialize log and cache
     log = Log()
-    cache = Cache(100000)
+    cache = Cache(CACHE_SIZE)
         
     try:
 
