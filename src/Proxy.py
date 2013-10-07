@@ -53,8 +53,8 @@ class Cache:
         self.max_size = max_size
         self.lock = threading.Lock()
 
-    def insert(self, uri, content, size, create=True):
-        if uri not in self.table:
+    def insert(self, hashid, content, size, create=True):
+        if hashid not in self.table:
             if(size > self.max_size):
                 print ("Object's size is exceeds the limit for this cache")
                 return
@@ -68,7 +68,7 @@ class Cache:
                         #Remove the file
                         self.last.delete_file()                    
                         #Move the self.last pointer to the previous entry
-                        pre_entry = self.last.previous_entry
+                        pre_entry = self.last.prev_entry
                         self.last = pre_entry 
                         #Remove a reference to the previous-last entry from
                         #the dictionary
@@ -83,16 +83,16 @@ class Cache:
                     
             # Handle if the cache is empty
             if self.first is None:
-                new_first = self.Entry(uri, size, None, None)
+                new_first = self.Entry(hashid, size, None, None)
                 self.first = new_first
                 self.last = new_first
-                self.table[uri] = new_first
+                self.table[hashid] = new_first
                 print ("First object added to the cache")                
             else:
                 #Set the new entry as the first in the queue
-                new_first = self.Entry(uri, size, None, self.first)
-                self.first.previous_entry = new_first
-                self.table[uri] = new_first
+                new_first = self.Entry(hashid, size, None, self.first)
+                self.first.prev_entry = new_first
+                self.table[hashid] = new_first
                 self.first = new_first
                 print ("Object set as first in the cache")
             
@@ -104,8 +104,8 @@ class Cache:
         else:
             #Get references for the current entry, as well as the next 
             #and previous ones
-            old_entry = self.table[uri]
-            pre_entry = old_entry.previous_entry
+            old_entry = self.table[hashid]
+            pre_entry = old_entry.prev_entry
             next_entry = old_entry.next_entry
             
             if pre_entry is None :
@@ -116,11 +116,11 @@ class Cache:
             if next_entry is not None :
                 #remove the reference to the current entry by making 
                 #the next entry point straight to the previous entry 
-                next_entry.previous_entry = pre_entry
+                next_entry.prev_entry = pre_entry
             else:
                 #Move the self.last pointer one position and remove the 
                 #reference to the current pointer
-                new_last = self.last.previous_entry
+                new_last = self.last.prev_entry
                 self.last = new_last
                 self.last.next_entry = None
 
@@ -130,33 +130,33 @@ class Cache:
             
             #remove the last reference to the current entry by removing
             #the respective entry in the dictionary
-            del self.table[uri]
+            del self.table[hashid]
 
             #The object is still cached on disk but we have removed all 
             #references in-memory. Now we will add the entry again, set 
             #the create flag to denote that the file does not need to be
             #created again 
             print ("Object is getting poked")
-            self.put(uri,content,size,False)
+            self.put(hashid,content,size,False)
     
-    def put(self, uri, content, size):
+    def put(self, hashid, content, size):
         print ("About to lock")
         self.lock.acquire()
         try:
-            self.insert(uri,content,size)
+            self.insert(hashid,content,size)
         except:
             pass
         self.lock.release()
         print ("Lock released")
     
-    def get(self, uri):
+    def get(self, hashid):
         print ("About to lock")
         self.lock.acquire()
         try:
             content = None
-            if uri in self.table:
-                found = self.table[uri]
-                self.insert(uri,None,found.size)
+            if hashid in self.table:
+                found = self.table[hashid]
+                self.insert(hashid,None,found.size)
                 content = found.read_file()
         except:
             pass
@@ -169,8 +169,8 @@ class Cache:
 
     class Entry:
 
-        def __init__(self, key, size, previous_entry, next_entry):
-            self.previous_entry = previous_entry
+        def __init__(self, key, size, prev_entry, next_entry):
+            self.prev_entry = prev_entry
             self.key = key
             self.size = size
             self.next_entry = next_entry
@@ -195,11 +195,12 @@ class Cache:
                 self.next_entry.print_queue()
         
 class HttpRequest:
-    def __init__(self, decoded_request):
 
-        self.method = (decoded_request).splitlines()[0].split()[0]
-        self.request_uri = (decoded_request).splitlines()[0].split()[1]
-        self.http_version = (decoded_request).splitlines()[0].split()[2]
+    def __init__(self, decoded_request):
+        firstline_split = (decoded_request).splitlines()[0].split()
+        self.method = firstline_split[0]
+        self.request_uri = firstline_split[1]
+        self.http_version = firstline_split[2]
         self.request_headers = dict()
         
         tmp = (decoded_request).splitlines()[1:-1]
@@ -218,10 +219,8 @@ class HttpRequest:
             del self.request_headers['Cache-Control']
 
     def set_connection_close(self):
-        #~ pdb.set_trace()
-        if 'Proxy-Connection' in self.request_headers:
-            if self.request_headers['Proxy-Connection'] == 'Keep-Alive':
-                self.request_headers['Proxy-Connection'] = 'Close'
+        if 'Proxy-Connection' in self.request_headers and self.request_headers['Proxy-Connection'] == 'Keep-Alive':
+            self.request_headers['Proxy-Connection'] = 'Close'
         
     def strip_user_agent(self):
         del self.request_headers['User-Agent']
@@ -435,7 +434,6 @@ def start_server(host='localhost', port=4444, IPv6=False, strip_cache_headers=Tr
     print("\nClosing log file...")
     log.close()
     print("Goodbye.")
-        
 
 if __name__ == '__main__':        
 
