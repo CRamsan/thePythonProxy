@@ -53,25 +53,67 @@ class Cache:
         self.max_size = max_size
         self.lock = threading.Lock()
 
-    def insert(self, hashid, content, size, create=True):
+    def touch(self, hashid):
+        if hashid in self.table:
+
+            #Get references for the current entry, as well as the next 
+            #and previous ones
+            touch_entry = self.table[hashid]
+            touch_entry.acquire_lock()
+
+            prev_entry = touch_entry.prev_entry
+            next_entry = touch_entry.next_entry
+            
+            if prev_entry is None :
+                print ("Object is already first in cache")
+                return
+
+
+            #remove the reference to the current entry by making 
+            #the previous entry point straight to the next entry                                              
+            if prev_entry is not None:
+                prev_entry.next_entry = next_entry
+
+            #If the entry is not the last one
+            if next_entry is not None:
+                #remove the reference to the current entry by making 
+                #the next entry point straight to the previous entry 
+                next_entry.prev_entry = prev_entry
+
+            # insert in front
+            if self.first is not None:
+                next_entry = self.first
+                self.first.prev_entry = touch_entry
+                
+            prev_entry = None
+            self.first = touch_entry
+
+            touch_entry.release_lock()
+
+    def insert(self, hashid, content, size):
+
         if hashid not in self.table:
             if(size > self.max_size):
                 print ("Object's size is exceeds the limit for this cache")
                 return
             else:
                 # The item fits in the cache but some items need to be removed first
-                if(create and self.current_size + size > self.max_size):
+                if(self.current_size + size > self.max_size):
+                    self.lock.acquire()
                     while True:
-                        #Get the size and key of the entry to be removed
-                        del_size = self.last.size
-                        del_key = self.last.key
-                        #Remove the file
-                        self.last.delete_file()                    
+                        # Get the size and key of the entry to be removed
+                        old_last = self.last
+                        old_last.acquire_lock()
+                        del_size = old_last.size
+                        del_key = old_last.key
+                        # Remove the file
+                        old_last.delete_file()                    
                         #Move the self.last pointer to the previous entry
-                        pre_entry = self.last.prev_entry
-                        self.last = pre_entry 
+                        prev_entry = old_last.prev_entry
+                        self.last = prev_entry 
                         #Remove a reference to the previous-last entry from
                         #the dictionary
+                        old_last.release_lock()
                         del self.table[del_key]
                         #The last entry does not have a 'next' entry
                         self.last.next_entry = None
@@ -80,88 +122,35 @@ class Cache:
                         # Check if new entry will fit after last item was removed
                         if(self.current_size + size <= self.max_size):
                             break
+                    self.lock.release()
                     
             # Handle if the cache is empty
+            new_first = None
             if self.first is None:
                 new_first = self.Entry(hashid, size, None, None)
-                self.first = new_first
                 self.last = new_first
-                self.table[hashid] = new_first
                 print ("First object added to the cache")                
             else:
                 #Set the new entry as the first in the queue
                 new_first = self.Entry(hashid, size, None, self.first)
                 self.first.prev_entry = new_first
-                self.table[hashid] = new_first
-                self.first = new_first
-                print ("Object set as first in the cache")
             
-            #create=False means the file does not need to be created.
-            if create:
-                self.first.create_file(content)
-                self.current_size += size
+            self.first = new_first
+            self.table[hashid] = new_first
+            self.first.create_file(content)
+            self.current_size += size
+
         #If entry is already in queue    
         else:
-            #Get references for the current entry, as well as the next 
-            #and previous ones
-            old_entry = self.table[hashid]
-            pre_entry = old_entry.prev_entry
-            next_entry = old_entry.next_entry
-            
-            if pre_entry is None :
-                print ("Object is already first in cache")
-                return
-            
-            #If the entry is not the last one
-            if next_entry is not None :
-                #remove the reference to the current entry by making 
-                #the next entry point straight to the previous entry 
-                next_entry.prev_entry = pre_entry
-            else:
-                #Move the self.last pointer one position and remove the 
-                #reference to the current pointer
-                new_last = self.last.prev_entry
-                self.last = new_last
-                self.last.next_entry = None
-
-            #remove the reference to the current entry by making 
-            #the previous entry point straight to the next entry                                  
-            pre_entry.next_entry = next_entry
-            
-            #remove the last reference to the current entry by removing
-            #the respective entry in the dictionary
-            del self.table[hashid]
-
-            #The object is still cached on disk but we have removed all 
-            #references in-memory. Now we will add the entry again, set 
-            #the create flag to denote that the file does not need to be
-            #created again 
-            print ("Object is getting poked")
-            self.put(hashid,content,size,False)
-    
-    def put(self, hashid, content, size):
-        print ("About to lock")
-        self.lock.acquire()
-        try:
-            self.insert(hashid,content,size)
-        except:
-            pass
-        self.lock.release()
-        print ("Lock released")
+            self.touch(hashid)
     
     def get(self, hashid):
-        print ("About to lock")
-        self.lock.acquire()
-        try:
-            content = None
-            if hashid in self.table:
-                found = self.table[hashid]
-                self.insert(hashid,None,found.size)
-                content = found.read_file()
-        except:
-            pass
-        self.lock.release()
-        print ("Lock released")
+        content = None
+        if hashid in self.table:
+            found = self.table[hashid]
+            self.touch(hashid)
+            content = found.read_file()
+
         return content
     
     def queue(self):
@@ -185,7 +174,7 @@ class Cache:
         def create_file(self, data):
             cache_file = open("cache/"+str(self.key), 'wb')
             cache_file.write(data)
-            cach_file.close()
+            cache_file.close()
 
         def delete_file(self):
             os.remove("cache/"+str(self.key))            
@@ -195,10 +184,10 @@ class Cache:
             if self.next_entry is not None:
                 self.next_entry.print_queue()
 
-        def lock(self):
+        def acquire_lock(self):
             self.lock.acquire()
 
-        def unlock(self):
+        def release_lock(self):
             self.lock.release()
         
 class HttpRequest:
@@ -226,8 +215,8 @@ class HttpRequest:
             del self.request_headers['Cache-Control']
 
     def set_connection_close(self):
-        if 'Proxy-Connection' in self.request_headers and self.request_headers['Proxy-Connection'] == 'Keep-Alive':
-                self.request_headers['Proxy-Connection'] = 'Close'
+        if 'Connection' in self.request_headers and self.request_headers['Connection'] == 'keep-alive':
+                self.request_headers['Connection'] = 'close'
         
     def strip_user_agent(self):
         del self.request_headers['User-Agent']
@@ -284,7 +273,7 @@ class ClientRequest:
         self.socket_type = local_conn.type
         self.address = address
         self.decoded_client_request = HttpRequest(bytes.decode(local_conn.recv(BUFFER_LENGTH)))
-        self.port = decoded_client_request.get_port()
+        self.port = self.decoded_client_request.get_port()
 
         if strip_cache_headers:
             self.decoded_client_request.strip_cache_headers()
@@ -315,7 +304,8 @@ class ClientRequest:
                     sent = self.local_conn.send(cached)
                     total_sent += sent
 
-                # TODO: invoke touch() on cache[request_digest]
+                cache.touch(request_digest)
+
             else: 
                 remote_conn = socket.socket(self.socket_family, self.socket_type)
                 remote_conn.connect((host, self.port))
@@ -342,13 +332,14 @@ class ClientRequest:
                         break
 
                 response_size = len(response)
-                print("--- Server Response ---\n%s\n" % repr(response))
+                # print("--- Server Response ---\n%s\n" % repr(response))
+                print("--- Server Response ---\n")
                 
                 remote_conn.close()
 
                 # add response to cache
                 if  self.decoded_client_request.method == 'GET' :
-                    cache.put(request_digest, response, response_size)
+                    cache.insert(request_digest, response, response_size)
                             
             # convert hostname to IP address
             ip = socket.gethostbyname(host)
