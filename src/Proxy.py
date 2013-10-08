@@ -93,7 +93,7 @@ class Cache:
             print("%s moved to front of cache.\n" % (hashid))
 
     def insert(self, hashid, content, size):
-
+        
         if hashid not in self.table:
             if(size > self.max_size):
                 print ("Object's size is exceeds the limit for this cache")
@@ -292,7 +292,7 @@ class ClientRequest:
             raise InvalidRequest("Request is empty.")
 
 
-        print("client->proxy request before processing: %s\n" % (bytes.decode(local_request)))
+        # print("client->proxy request before processing: %s\n" % (bytes.decode(local_request)))
         
         self.decoded_client_request = HttpRequest(bytes.decode(local_request))
         self.port = self.decoded_client_request.get_port()
@@ -388,8 +388,8 @@ class ClientRequest:
                 remote_conn.close()
 
                 # add response to cache
-                # if  self.decoded_client_request.method == 'GET' :
-                #     cache.insert(request_digest, response, response_size)
+                if  self.decoded_client_request.method == 'GET' :
+                    cache.insert(request_digest, response, response_size)
                             
             # convert hostname to IP address
             ip = socket.gethostbyname(host)
@@ -397,9 +397,10 @@ class ClientRequest:
             # acquire lock and write to file
             log.append(ip, response_size)
 
-        except OSError: 
+        except:
             # exit gracefully
-            pass
+            if cache.lock.locked():
+                cache.lock.release()
 
 class ProxyConn:
                 
