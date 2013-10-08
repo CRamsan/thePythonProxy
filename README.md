@@ -3,7 +3,7 @@ thePythonProxy
 
 Prerequisites
 -------------
-This proxy is written using Python3. Make sure that you have it installed.
+This proxy is written using Python3. Please make sure that you have it installed.
 
 References
 ----------
