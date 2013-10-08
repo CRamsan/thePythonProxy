@@ -449,7 +449,8 @@ class ClientRequest:
             ip = socket.gethostbyname(host)
             
             # acquire lock and write to file
-            log.append(ip, response_size)
+            # log.append(ip, response_size)
+            log.append(self.address[0], self.decoded_client_request.request_uri, response_size)
 
         except:
             # exit gracefully
@@ -494,12 +495,12 @@ class Log:
     def close(self):
         self.log_file.close()
 
-    def append(self, ip, response_size):
+    def append(self, client_ip, url, response_size):
         '''
         Acquire the log lock and then append the request/response information.
         '''
         self.log_lock.acquire()
-        self.log_file.write("%s %s %i\n" % (str(datetime.datetime.now()), ip, response_size))
+        self.log_file.write("%s: %s %s %i\n" % (str(datetime.datetime.now()), client_ip, url, response_size))
         self.log_lock.release()
 
 def start_server(host='localhost', port=4444, IPv6=False, strip_cache_headers=True, strip_user_agent=True, timeout=30):
