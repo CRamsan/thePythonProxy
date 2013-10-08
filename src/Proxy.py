@@ -60,7 +60,6 @@ class Cache:
             #Get references for the current entry, as well as the next 
             #and previous ones
             touch_entry = self.table[hashid]
-            #touch_entry.acquire_lock()
 
             prev_entry = touch_entry.prev_entry
             next_entry = touch_entry.next_entry
@@ -68,7 +67,6 @@ class Cache:
             if prev_entry is None :
                 print ("Object is already first in cache")
                 return
-
 
             #remove the reference to the current entry by making 
             #the previous entry point straight to the next entry                                              
@@ -89,7 +87,6 @@ class Cache:
             prev_entry = None
             self.first = touch_entry
 
-            #touch_entry.release_lock()
             print("%s moved to front of cache.\n" % (hashid))
 
     def insert(self, hashid, content, size):
@@ -166,7 +163,6 @@ class Cache:
             self.key = key
             self.size = size
             self.next_entry = next_entry
-            self.lock = threading.Lock()
 
         def read_file(self):
             cache_file = open("cache/"+str(self.key), 'rb')
@@ -186,12 +182,6 @@ class Cache:
             print (self.key)
             if self.next_entry is not None:
                 self.next_entry.print_queue()
-
-        def acquire_lock(self):
-            self.lock.acquire()
-
-        def release_lock(self):
-            self.lock.release()
         
 class HttpRequest:
 
@@ -202,16 +192,11 @@ class HttpRequest:
         self.http_version = firstline_split[2]
         self.request_headers = dict()
 
-        try:
-            tmp = (decoded_request).splitlines()[1:-1]
-            for line in tmp:
-                if line != "":
-                    colon_index = line.find(':')
-                    
-                    self.request_headers[line[0:colon_index]] = line[colon_index+1:]
-                    #self.request_headers[line.split(':')[0]] = line.split(':')[1].strip()
-        except:
-            print("DECODED REQUEST THAT CAUSED ERROR: %s" % (decoded_request))
+        tmp = (decoded_request).splitlines()[1:-1]
+        for line in tmp:
+            if line != "":
+                colon_index = line.find(':')
+                self.request_headers[line[0:colon_index]] = line[colon_index+1:]
         
         self.message_body = (decoded_request).splitlines()[-1]
         self.request_line = [self.method, self.request_uri, self.http_version]
@@ -291,9 +276,6 @@ class ClientRequest:
         if local_request == b'':
             raise InvalidRequest("Request is empty.")
 
-
-        # print("client->proxy request before processing: %s\n" % (bytes.decode(local_request)))
-        
         self.decoded_client_request = HttpRequest(bytes.decode(local_request))
         self.port = self.decoded_client_request.get_port()
 
@@ -318,8 +300,7 @@ class ClientRequest:
 
             # if request has been cached, return the response to the client directly from the cache
             if  self.decoded_client_request.method == 'GET' and request_digest in cache.table:
-            # if  (self.decoded_client_request.method == 'GET' or self.decoded_client_request.method == 'POST') and request_digest in cache.table:
-            # if  self.decoded_client_request.method == 'GET': # testing
+
                 cached = cache.get(request_digest)
                 response_size = len(cached)
                 total_sent = 0
@@ -357,31 +338,6 @@ class ClientRequest:
                         break
 
                 response_size = len(response)
-                # print("--- Server Response ---\n%s\n" % repr(response))
-
-                # <testing>
-                # remote_conn = socket.socket(self.socket_family, self.socket_type)
-                # remote_conn.connect((host, self.port))
-                # request_size = len(self.decoded_client_request.get_modified_request())                            
-                # total_sent = 0
-
-                # while total_sent < request_size:
-                #     sent = remote_conn.send(str.encode(self.decoded_client_request.get_modified_request()))
-                #     total_sent += sent
-
-                # print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
-                
-                # response = b''
-                # while True:
-                #     recvd = remote_conn.recv(BUFFER_LENGTH)
-                #     if len(recvd) > 0:
-                #         self.local_conn.send(recvd)
-                #         response += recvd
-                #     else:
-                #         break
-
-                # response_size = len(response)
-                #</testing>
 
                 print("--- Server Response Fowarded ---\n")
                 
