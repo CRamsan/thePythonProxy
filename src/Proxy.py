@@ -25,8 +25,7 @@ class Cache:
     as a doubly linked list, as well as a dictionary mapping response hash IDs to
     the entries.
 
-    This structure allows to keep track of all the entries in the way of a queue. 
-    Each entry is apended at the begining of the queue and when the cache is full
+    Each entry is appended at the begining of the queue and when the cache is full
     the last entry is removed. Furthermore, the entry dictionary is used to achieve
     reading operations in constant time.
     '''

@@ -17,9 +17,13 @@ https://code.google.com/p/python-proxy/
 This code for this program has been placed in the references/ directory,
 for your convenience.
 
+Implementation Documentaion
+---------------------------
+A report documenting the implementation of this proxy can be found in the
+top-level directory, named 'report.pdf'.
+
 Running the Proxy
 -----------------
-
 To run it simply call it like this: 
  - ./Proxy.py
 
