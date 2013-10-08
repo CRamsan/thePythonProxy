@@ -158,7 +158,6 @@ class Cache:
 
     class Entry:
         '''
-
         A cache entry. Each entry of the cache contains the following attributes:
     
         ``key``
@@ -172,7 +171,6 @@ class Cache:
 
         ``next_entry``
             pointer to next entry
-
         '''
 
         def __init__(self, key, size, prev_entry, next_entry):
