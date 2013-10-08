@@ -42,3 +42,8 @@ proxy.log
 
 # cache files
 cache/
+
+# latex
+doc/auto/
+*.aux
+*.log
