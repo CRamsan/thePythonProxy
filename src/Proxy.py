@@ -3,6 +3,7 @@
 PROXY_NAME = 'Perry, the Python Proxy'
 HTTP_VERSION = 'HTTP/1.1'
 BUFFER_LENGTH = 1024 * 8
+CACHE_SIZE = 200000
 
 import threading
 import socket
@@ -53,26 +54,70 @@ class Cache:
         self.max_size = max_size
         self.lock = threading.Lock()
 
-    def insert(self, hashid, content, size, create=True):
+    def touch(self, hashid):
+        if hashid in self.table:
+
+            #Get references for the current entry, as well as the next 
+            #and previous ones
+            touch_entry = self.table[hashid]
+            #touch_entry.acquire_lock()
+
+            prev_entry = touch_entry.prev_entry
+            next_entry = touch_entry.next_entry
+            
+            if prev_entry is None :
+                print ("Object is already first in cache")
+                return
+
+
+            #remove the reference to the current entry by making 
+            #the previous entry point straight to the next entry                                              
+            if prev_entry is not None:
+                prev_entry.next_entry = next_entry
+
+            #If the entry is not the last one
+            if next_entry is not None:
+                #remove the reference to the current entry by making 
+                #the next entry point straight to the previous entry 
+                next_entry.prev_entry = prev_entry
+
+            # insert in front
+            if self.first is not None:
+                next_entry = self.first
+                self.first.prev_entry = touch_entry
+                
+            prev_entry = None
+            self.first = touch_entry
+
+            #touch_entry.release_lock()
+            print("%s moved to front of cache.\n" % (hashid))
+
+    def insert(self, hashid, content, size):
+        
         if hashid not in self.table:
             if(size > self.max_size):
                 print ("Object's size is exceeds the limit for this cache")
                 return
             else:
                 # The item fits in the cache but some items need to be removed first
-                if(create and self.current_size + size > self.max_size):
+                if(self.current_size + size > self.max_size):
+                    self.lock.acquire()
                     while True:
-                        #Get the size and key of the entry to be removed
-                        del_size = self.last.size
-                        del_key = self.last.key
-                        #Remove the file
-                        self.last.delete_file()                    
+                        # Get the size and key of the entry to be removed
+                        old_last = self.last
+                        old_last.acquire_lock()
+                        del_size = old_last.size
+                        del_key = old_last.key
+                        # Remove the file
+                        old_last.delete_file()                    
                         #Move the self.last pointer to the previous entry
-                        pre_entry = self.last.prev_entry
-                        self.last = pre_entry 
+                        prev_entry = old_last.prev_entry
+                        self.last = prev_entry 
                         #Remove a reference to the previous-last entry from
                         #the dictionary
+                        old_last.release_lock()
                         del self.table[del_key]
+                        print("%s removed from cache.\n" % (del_key))
                         #The last entry does not have a 'next' entry
                         self.last.next_entry = None
                         #Substract the file size
@@ -80,88 +125,35 @@ class Cache:
                         # Check if new entry will fit after last item was removed
                         if(self.current_size + size <= self.max_size):
                             break
+                    self.lock.release()
                     
             # Handle if the cache is empty
+            new_first = None
             if self.first is None:
                 new_first = self.Entry(hashid, size, None, None)
-                self.first = new_first
                 self.last = new_first
-                self.table[hashid] = new_first
-                print ("First object added to the cache")                
             else:
                 #Set the new entry as the first in the queue
                 new_first = self.Entry(hashid, size, None, self.first)
                 self.first.prev_entry = new_first
-                self.table[hashid] = new_first
-                self.first = new_first
-                print ("Object set as first in the cache")
             
-            #create=False means the file does not need to be created.
-            if create:
-                self.first.create_file(content)
-                self.current_size += size
+            self.first = new_first
+            self.table[hashid] = new_first
+            self.first.create_file(content)
+            self.current_size += size
+            print("%s added to cache.\n" % (hashid))
+
         #If entry is already in queue    
         else:
-            #Get references for the current entry, as well as the next 
-            #and previous ones
-            old_entry = self.table[hashid]
-            pre_entry = old_entry.prev_entry
-            next_entry = old_entry.next_entry
-            
-            if pre_entry is None :
-                print ("Object is already first in cache")
-                return
-            
-            #If the entry is not the last one
-            if next_entry is not None :
-                #remove the reference to the current entry by making 
-                #the next entry point straight to the previous entry 
-                next_entry.prev_entry = pre_entry
-            else:
-                #Move the self.last pointer one position and remove the 
-                #reference to the current pointer
-                new_last = self.last.prev_entry
-                self.last = new_last
-                self.last.next_entry = None
-
-            #remove the reference to the current entry by making 
-            #the previous entry point straight to the next entry                                  
-            pre_entry.next_entry = next_entry
-            
-            #remove the last reference to the current entry by removing
-            #the respective entry in the dictionary
-            del self.table[hashid]
-
-            #The object is still cached on disk but we have removed all 
-            #references in-memory. Now we will add the entry again, set 
-            #the create flag to denote that the file does not need to be
-            #created again 
-            print ("Object is getting poked")
-            self.put(hashid,content,size,False)
-    
-    def put(self, hashid, content, size):
-        print ("About to lock")
-        self.lock.acquire()
-        try:
-            self.insert(hashid,content,size)
-        except:
-            pass
-        self.lock.release()
-        print ("Lock released")
+            self.touch(hashid)
     
     def get(self, hashid):
-        print ("About to lock")
-        self.lock.acquire()
-        try:
-            content = None
-            if hashid in self.table:
-                found = self.table[hashid]
-                self.insert(hashid,None,found.size)
-                content = found.read_file()
-        except:
-            pass
-        self.lock.release()
-        print ("Lock released")
+        content = None
+        if hashid in self.table:
+            found = self.table[hashid]
+            self.touch(hashid)
+            content = found.read_file()
+
         return content
     
     def queue(self):
@@ -174,6 +166,7 @@ class Cache:
             self.key = key
             self.size = size
             self.next_entry = next_entry
+            self.lock = threading.Lock()
 
         def read_file(self):
             cache_file = open("cache/"+str(self.key), 'rb')
@@ -184,7 +177,7 @@ class Cache:
         def create_file(self, data):
             cache_file = open("cache/"+str(self.key), 'wb')
             cache_file.write(data)
-            cach_file.close()
+            cache_file.close()
 
         def delete_file(self):
             os.remove("cache/"+str(self.key))            
@@ -193,6 +186,12 @@ class Cache:
             print (self.key)
             if self.next_entry is not None:
                 self.next_entry.print_queue()
+
+        def acquire_lock(self):
+            self.lock.acquire()
+
+        def release_lock(self):
+            self.lock.release()
         
 class HttpRequest:
 
@@ -202,10 +201,17 @@ class HttpRequest:
         self.request_uri = firstline_split[1]
         self.http_version = firstline_split[2]
         self.request_headers = dict()
-        
-        tmp = (decoded_request).splitlines()[1:-1]
-        for line in tmp:
-            self.request_headers[line.split(':')[0]] = line.split(':')[1].strip()
+
+        try:
+            tmp = (decoded_request).splitlines()[1:-1]
+            for line in tmp:
+                if line != "":
+                    colon_index = line.find(':')
+                    
+                    self.request_headers[line[0:colon_index]] = line[colon_index+1:]
+                    #self.request_headers[line.split(':')[0]] = line.split(':')[1].strip()
+        except:
+            print("DECODED REQUEST THAT CAUSED ERROR: %s" % (decoded_request))
         
         self.message_body = (decoded_request).splitlines()[-1]
         self.request_line = [self.method, self.request_uri, self.http_version]
@@ -219,8 +225,10 @@ class HttpRequest:
             del self.request_headers['Cache-Control']
 
     def set_connection_close(self):
-        if 'Proxy-Connection' in self.request_headers and self.request_headers['Proxy-Connection'] == 'Keep-Alive':
-                self.request_headers['Proxy-Connection'] = 'Close'
+        if 'Connection' in self.request_headers:
+                self.request_headers['Connection'] = 'close'
+        if 'Proxy-Connection' in self.request_headers:
+                self.request_headers['Proxy-Connection'] = 'close'
         
     def strip_user_agent(self):
         del self.request_headers['User-Agent']
@@ -276,8 +284,18 @@ class ClientRequest:
         self.socket_family = local_conn.family
         self.socket_type = local_conn.type
         self.address = address
-        self.decoded_client_request = HttpRequest(bytes.decode(local_conn.recv(BUFFER_LENGTH)))
-        self.port = decoded_client_request.get_port()
+
+        local_request  = local_conn.recv(BUFFER_LENGTH)
+
+        # if empty, throw exception
+        if local_request == b'':
+            raise InvalidRequest("Request is empty.")
+
+
+        # print("client->proxy request before processing: %s\n" % (bytes.decode(local_request)))
+        
+        self.decoded_client_request = HttpRequest(bytes.decode(local_request))
+        self.port = self.decoded_client_request.get_port()
 
         if strip_cache_headers:
             self.decoded_client_request.strip_cache_headers()
@@ -300,6 +318,8 @@ class ClientRequest:
 
             # if request has been cached, return the response to the client directly from the cache
             if  self.decoded_client_request.method == 'GET' and request_digest in cache.table:
+            # if  (self.decoded_client_request.method == 'GET' or self.decoded_client_request.method == 'POST') and request_digest in cache.table:
+            # if  self.decoded_client_request.method == 'GET': # testing
                 cached = cache.get(request_digest)
                 response_size = len(cached)
                 total_sent = 0
@@ -308,10 +328,12 @@ class ClientRequest:
                     sent = self.local_conn.send(cached)
                     total_sent += sent
 
-                # TODO: invoke touch() on cache[request_digest]
+                print("%s forwarded from cache.\n" % (request_digest))
+
             else: 
                 remote_conn = socket.socket(self.socket_family, self.socket_type)
                 remote_conn.connect((host, self.port))
+                remote_conn.settimeout(10.0)
 
                 if  self.decoded_client_request.method == 'CONNECT':
                     self.local_conn.send(HTTP_VERSION+' 200 Connection established\nProxy-agent: %s\n\n'%PROXY_NAME)
@@ -335,13 +357,39 @@ class ClientRequest:
                         break
 
                 response_size = len(response)
-                print("--- Server Response ---\n%s\n" % repr(response))
+                # print("--- Server Response ---\n%s\n" % repr(response))
+
+                # <testing>
+                # remote_conn = socket.socket(self.socket_family, self.socket_type)
+                # remote_conn.connect((host, self.port))
+                # request_size = len(self.decoded_client_request.get_modified_request())                            
+                # total_sent = 0
+
+                # while total_sent < request_size:
+                #     sent = remote_conn.send(str.encode(self.decoded_client_request.get_modified_request()))
+                #     total_sent += sent
+
+                # print("--- Proxy -> Server Request ---\n%s" % (self.decoded_client_request.get_modified_request()))
+                
+                # response = b''
+                # while True:
+                #     recvd = remote_conn.recv(BUFFER_LENGTH)
+                #     if len(recvd) > 0:
+                #         self.local_conn.send(recvd)
+                #         response += recvd
+                #     else:
+                #         break
+
+                # response_size = len(response)
+                #</testing>
+
+                print("--- Server Response Fowarded ---\n")
                 
                 remote_conn.close()
 
                 # add response to cache
                 if  self.decoded_client_request.method == 'GET' :
-                    cache.put(request_digest, response, response_size)
+                    cache.insert(request_digest, response, response_size)
                             
             # convert hostname to IP address
             ip = socket.gethostbyname(host)
@@ -349,9 +397,10 @@ class ClientRequest:
             # acquire lock and write to file
             log.append(ip, response_size)
 
-        except OSError: 
+        except:
             # exit gracefully
-            pass
+            if cache.lock.locked():
+                cache.lock.release()
 
 class ProxyConn:
                 
@@ -361,10 +410,19 @@ class ProxyConn:
         self.timeout = timeout
         self.cache = cache
 
-        self.request = ClientRequest(self.client_conn, address, strip_cache_headers, strip_user_agent)
-        self.request.execute(log, cache)
+        try:
+            self.request = ClientRequest(self.client_conn, address, strip_cache_headers, strip_user_agent)
+            self.request.execute(log, cache)
+        except InvalidRequest:
+            pass
 
         self.client_conn.close()
+
+class InvalidRequest(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
 
 class Log:
 
@@ -392,7 +450,7 @@ def start_server(host='localhost', port=4444, IPv6=False, strip_cache_headers=Tr
 
     # initialize log and cache
     log = Log()
-    cache = Cache(100000)
+    cache = Cache(CACHE_SIZE)
         
     try:
 
